@@ -273,6 +273,274 @@ export function edgeEnhanceImageData(source, level = 3, selection = null) {
   );
 }
 
+
+export function histogramData(source, selection = null) {
+  const red = new Uint32Array(256);
+  const green = new Uint32Array(256);
+  const blue = new Uint32Array(256);
+  const luma = new Uint32Array(256);
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  const d = source.data;
+  let pixels = 0;
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      red[d[i]]++;
+      green[d[i + 1]]++;
+      blue[d[i + 2]]++;
+      const yv = clamp255(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      luma[yv]++;
+      pixels++;
+    }
+  }
+  return {
+    red: Array.from(red),
+    green: Array.from(green),
+    blue: Array.from(blue),
+    luma: Array.from(luma),
+    pixels
+  };
+}
+
+export function normalizeImageData(source, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  const min = [255, 255, 255];
+  const max = [0, 0, 0];
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      for (let ch = 0; ch < 3; ch++) {
+        const v = d[i + ch];
+        if (v < min[ch]) min[ch] = v;
+        if (v > max[ch]) max[ch] = v;
+      }
+    }
+  }
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      for (let ch = 0; ch < 3; ch++) {
+        const span = max[ch] - min[ch];
+        d[i + ch] = span ? clamp255((d[i + ch] - min[ch]) * 255 / span) : d[i + ch];
+      }
+    }
+  }
+  return out;
+}
+
+export function equalizeImageData(source, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  const hist = new Uint32Array(256);
+  let count = 0;
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const yv = clamp255(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      hist[yv]++;
+      count++;
+    }
+  }
+
+  const cdf = new Uint32Array(256);
+  let running = 0, cdfMin = 0;
+  for (let i = 0; i < 256; i++) {
+    running += hist[i];
+    cdf[i] = running;
+    if (!cdfMin && hist[i]) cdfMin = running;
+  }
+  const denom = Math.max(1, count - cdfMin);
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const oldY = Math.max(1, 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      const idx = clamp255(oldY);
+      const newY = clamp255((cdf[idx] - cdfMin) * 255 / denom);
+      const ratio = newY / oldY;
+      d[i] = clamp255(d[i] * ratio);
+      d[i + 1] = clamp255(d[i + 1] * ratio);
+      d[i + 2] = clamp255(d[i + 2] * ratio);
+    }
+  }
+  return out;
+}
+
+export function edgeExtractImageData(source, level = 3, selection = null) {
+  const amount = Math.max(1, Math.min(20, Number(level) || 1));
+  const scale = amount / 3;
+  return convolve3x3(
+    source,
+    [0, -scale, 0, -scale, 4 * scale, -scale, 0, -scale, 0],
+    1,
+    128,
+    selection,
+    true
+  );
+}
+
+export function noiseImageData(source, amount = 15, color = false, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  const amp = Math.max(0, Math.min(100, Number(amount) || 0)) * 2.55;
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      if (color) {
+        d[i] = clamp255(d[i] + (Math.random() * 2 - 1) * amp);
+        d[i + 1] = clamp255(d[i + 1] + (Math.random() * 2 - 1) * amp);
+        d[i + 2] = clamp255(d[i + 2] + (Math.random() * 2 - 1) * amp);
+      } else {
+        const n = (Math.random() * 2 - 1) * amp;
+        d[i] = clamp255(d[i] + n);
+        d[i + 1] = clamp255(d[i + 1] + n);
+        d[i + 2] = clamp255(d[i + 2] + n);
+      }
+    }
+  }
+  return out;
+}
+
+export function diffuseImageData(source, radius = 4, selection = null) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width, h = source.height;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  radius = Math.max(1, Math.min(30, Math.round(Number(radius) || 1)));
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const sx = Math.max(0, Math.min(w - 1, x + Math.round((Math.random() * 2 - 1) * radius)));
+      const sy = Math.max(0, Math.min(h - 1, y + Math.round((Math.random() * 2 - 1) * radius)));
+      const si = (sy * w + sx) * 4;
+      const di = (y * w + x) * 4;
+      dst[di] = src[si];
+      dst[di + 1] = src[si + 1];
+      dst[di + 2] = src[si + 2];
+      dst[di + 3] = src[si + 3];
+    }
+  }
+  return out;
+}
+
+export function glassImageData(source, size = 6, direction = "both", selection = null) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width, h = source.height;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  size = Math.max(2, Math.min(80, Math.round(Number(size) || 6)));
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      let sx = x, sy = y;
+      if (direction === "horizontal" || direction === "both") {
+        const bx = Math.floor((x - x0) / size) * size + x0;
+        sx = Math.min(x1 - 1, bx + (size - 1 - ((x - bx) % size)));
+      }
+      if (direction === "vertical" || direction === "both") {
+        const by = Math.floor((y - y0) / size) * size + y0;
+        sy = Math.min(y1 - 1, by + (size - 1 - ((y - by) % size)));
+      }
+      const si = (Math.max(0, Math.min(h - 1, sy)) * w + Math.max(0, Math.min(w - 1, sx))) * 4;
+      const di = (y * w + x) * 4;
+      dst[di] = src[si];
+      dst[di + 1] = src[si + 1];
+      dst[di + 2] = src[si + 2];
+      dst[di + 3] = src[si + 3];
+    }
+  }
+  return out;
+}
+
+export function pencilImageData(source, selection = null) {
+  const edge = edgeExtractImageData(source, 4, selection);
+  const out = cloneImageData(source);
+  const d = out.data, e = edge.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const v = clamp255(255 - Math.abs(e[i] - 128) * 2.2);
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+  }
+  return out;
+}
+
+export function floodFillImageData(source, x, y, color, tolerance = 20, opacity = 1) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const w = source.width, h = source.height;
+  x = Math.max(0, Math.min(w - 1, Math.round(Number(x) || 0)));
+  y = Math.max(0, Math.min(h - 1, Math.round(Number(y) || 0)));
+  tolerance = Math.max(0, Math.min(255, Number(tolerance) || 0));
+  opacity = Math.max(0, Math.min(1, Number(opacity)));
+  const targetIndex = (y * w + x) * 4;
+  const target = [d[targetIndex], d[targetIndex + 1], d[targetIndex + 2], d[targetIndex + 3]];
+  const fill = parseHexColor(color);
+  const seen = new Uint8Array(w * h);
+  const stack = [x, y];
+
+  const closeEnough = idx =>
+    Math.abs(d[idx] - target[0]) <= tolerance &&
+    Math.abs(d[idx + 1] - target[1]) <= tolerance &&
+    Math.abs(d[idx + 2] - target[2]) <= tolerance &&
+    Math.abs(d[idx + 3] - target[3]) <= tolerance;
+
+  while (stack.length) {
+    const cy = stack.pop();
+    const cx = stack.pop();
+    const pos = cy * w + cx;
+    if (seen[pos]) continue;
+    seen[pos] = 1;
+    const i = pos * 4;
+    if (!closeEnough(i)) continue;
+
+    d[i] = clamp255(d[i] * (1 - opacity) + fill[0] * opacity);
+    d[i + 1] = clamp255(d[i + 1] * (1 - opacity) + fill[1] * opacity);
+    d[i + 2] = clamp255(d[i + 2] * (1 - opacity) + fill[2] * opacity);
+    d[i + 3] = clamp255(d[i + 3] * (1 - opacity) + 255 * opacity);
+
+    if (cx > 0) stack.push(cx - 1, cy);
+    if (cx < w - 1) stack.push(cx + 1, cy);
+    if (cy > 0) stack.push(cx, cy - 1);
+    if (cy < h - 1) stack.push(cx, cy + 1);
+  }
+  return out;
+}
+
+function parseHexColor(value) {
+  const hex = String(value || "#000000").replace("#", "");
+  if (hex.length === 3) {
+    return [
+      parseInt(hex[0] + hex[0], 16),
+      parseInt(hex[1] + hex[1], 16),
+      parseInt(hex[2] + hex[2], 16)
+    ];
+  }
+  return [
+    parseInt(hex.slice(0, 2), 16) || 0,
+    parseInt(hex.slice(2, 4), 16) || 0,
+    parseInt(hex.slice(4, 6), 16) || 0
+  ];
+}
+
 function gaussianKernel(level) {
   const radius = Math.max(1, Math.round(level));
   const sigma = Math.max(.65, level * .72);
