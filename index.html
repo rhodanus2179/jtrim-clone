@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.4.0</span>
+          <span class="version">v0.5.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -61,6 +61,9 @@
           <div class="menu-popup">
             <button data-command="image.resize">リサイズ(S)… <kbd>Ctrl+R</kbd></button>
             <button data-command="image.crop">切り抜き(T) <kbd>Ctrl+T</kbd></button>
+            <button data-command="image.circleCrop">円形切り抜き(E)…</button>
+            <button data-command="image.roundedCrop">角丸切り抜き(O)…</button>
+            <button data-command="image.coordinateCrop">座標指定切り抜き(U)… <kbd>Ctrl+U</kbd></button>
             <hr>
             <button data-command="image.rotateLeft">左へ90度回転(L)</button>
             <button data-command="image.rotateRight">右へ90度回転(R)</button>
@@ -68,7 +71,12 @@
             <hr>
             <button data-command="image.flipH">ミラー(M) <kbd>Ctrl+M</kbd></button>
             <button data-command="image.flipV">フリップ(F) <kbd>Ctrl+F</kbd></button>
+            <button data-command="image.shift">シフト(H)…</button>
             <button data-command="image.margin">余白作成(W)…</button>
+            <button data-command="image.shadow">影をつける(D)…</button>
+            <hr>
+            <button data-command="image.transparentColor">透過色設定(G)…</button>
+            <button data-command="image.toggleTransparency">透過状態を表示(B)</button>
           </div>
         </div>
         <div class="menu">
@@ -77,6 +85,7 @@
             <button data-command="color.grayscale">グレースケール変換(G) <kbd>Ctrl+G</kbd></button>
             <button data-command="color.sepia">セピア色変換(P)</button>
             <button data-command="color.invert">ネガポジ反転(N)</button>
+            <button data-command="color.colorScale">単色カラースケール(U)…</button>
             <hr>
             <button data-command="color.brightnessContrast">明るさ／コントラスト(B)…</button>
             <button data-command="color.rgb">RGBの度合い(R)…</button>
@@ -85,10 +94,17 @@
             <button data-command="color.gamma">ガンマ補正(M)…</button>
             <button data-command="color.hsv">HSVカラー調整(H)…</button>
             <button data-command="color.threshold">2階調化(W)…</button>
+            <button data-command="color.rgbExchange">RGB交換(S)</button>
+            <button data-command="color.xor">XORカラー変換(X)</button>
+            <button data-command="color.gradient">グラデーション(Q)…</button>
+            <button data-command="color.shadowHighlight">シャドウ・ハイライトの明るさ(A)…</button>
             <hr>
             <button data-command="color.histogram">ヒストグラム表示…</button>
             <button data-command="color.normalize">ノーマライズ</button>
             <button data-command="color.equalize">イコライズ</button>
+            <hr>
+            <button data-command="color.usedCount">使用色数計算(D)</button>
+            <button data-command="color.depth">色解像度の変更(F)…</button>
           </div>
         </div>
         <div class="menu">
@@ -576,6 +592,122 @@
 
 
 
+
+  <dialog id="shapeCropDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2 id="shapeCropTitle">円形切り抜き</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label id="shapeRadiusRow" class="slider-row"><span>丸め半径</span><input id="shapeRadiusRange" type="range" min="1" max="200" value="24"><input id="shapeRadiusNumber" type="number" min="1" max="1000" value="24"></label>
+        <label>背景色 <input id="shapeBackground" type="color" value="#ffffff"></label>
+        <fieldset>
+          <legend><label class="check-row"><input id="shapeBorder" type="checkbox"> 枠線をつける</label></legend>
+          <div class="inline-fields"><label>線幅 <input id="shapeBorderWidth" type="number" min="1" max="100" value="1"></label><label>色 <input id="shapeBorderColor" type="color" value="#000000"></label></div>
+        </fieldset>
+        <fieldset>
+          <legend><label class="check-row"><input id="shapeShadow" type="checkbox"> 影をつける</label></legend>
+          <div class="inline-fields"><label>横 <input id="shapeShadowX" type="number" min="-500" max="500" value="5"></label><label>縦 <input id="shapeShadowY" type="number" min="-500" max="500" value="5"></label><label>ぼかし <input id="shapeShadowBlur" type="number" min="0" max="200" value="6"></label></div>
+          <div class="inline-fields"><label>透明度 <input id="shapeShadowOpacity" type="number" min="0" max="100" value="35">%</label><label>色 <input id="shapeShadowColor" type="color" value="#000000"></label></div>
+        </fieldset>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="shapeCropOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="coordinateCropDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>座標指定切り抜き</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="field-grid">
+          <label>X <input id="coordX" type="number" min="0" value="0"></label>
+          <label>Y <input id="coordY" type="number" min="0" value="0"></label>
+          <label>横幅 <input id="coordWidth" type="number" min="1" value="100"></label>
+          <label>縦幅 <input id="coordHeight" type="number" min="1" value="100"></label>
+        </div>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="coordinateCropOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="shiftDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>シフト</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields"><label>横方向 <input id="shiftX" type="number" value="0"> px</label><label>縦方向 <input id="shiftY" type="number" value="0"> px</label></div>
+        <p class="help-text">画像端を越えた部分は反対側へ回り込みます。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="shiftOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="shadowDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>影をつける</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields"><label>横 <input id="shadowX" type="number" value="6"></label><label>縦 <input id="shadowY" type="number" value="6"></label><label>ぼかし <input id="shadowBlur" type="number" min="0" value="8"></label></div>
+        <label class="slider-row"><span>透明度</span><input id="shadowOpacityRange" type="range" min="0" max="100" value="40"><input id="shadowOpacityNumber" type="number" min="0" max="100" value="40"></label>
+        <label>影の色 <input id="shadowColor" type="color" value="#000000"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="shadowOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="transparentColorDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>透過色設定</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label>透過する色 <input id="transparentColor" type="color" value="#ffffff"></label>
+        <label class="slider-row"><span>許容範囲</span><input id="transparentToleranceRange" type="range" min="0" max="100" value="0"><input id="transparentToleranceNumber" type="number" min="0" max="255" value="0"></label>
+        <p class="help-text">JTrimの透過色指定は単一色が基本です。Web版では必要に応じ許容範囲も指定できます。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="transparentColorOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="colorScaleDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>単色カラースケール</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body"><label>色 <input id="colorScaleColor" type="color" value="#0080ff"></label></div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="colorScaleOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="gradientDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>グラデーション</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields"><label>開始色 <input id="gradientStart" type="color" value="#ffffff"></label><label>終了色 <input id="gradientEnd" type="color" value="#000000"></label></div>
+        <label>方向 <select id="gradientDirection"><option value="horizontal">左→右</option><option value="vertical">上→下</option><option value="diag-down">左上→右下</option><option value="diag-up">左下→右上</option></select></label>
+        <label class="slider-row"><span>不透明率</span><input id="gradientOpacityRange" type="range" min="0" max="100" value="50"><input id="gradientOpacityNumber" type="number" min="0" max="100" value="50"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="gradientOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="shadowHighlightDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>シャドウ・ハイライトの明るさ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>シャドウを明るく</span><input id="shadowsRange" type="range" min="-100" max="100" value="0"><input id="shadowsNumber" type="number" min="-100" max="100" value="0"></label>
+        <label class="slider-row"><span>ハイライトを暗く</span><input id="highlightsRange" type="range" min="-100" max="100" value="0"><input id="highlightsNumber" type="number" min="-100" max="100" value="0"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="shadowHighlightOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="colorDepthDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>色解像度の変更</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label>色数
+          <select id="colorDepthMode"><option value="24">24bit / 1677万色</option><option value="256">8bit相当 / 256色</option><option value="16">4bit相当 / 16色</option><option value="2">1bit相当 / 2色</option></select>
+        </label>
+        <label class="check-row"><input id="colorDepthDither" type="checkbox"> 誤差拡散（Floyd–Steinberg）</label>
+        <p class="help-text">ブラウザ内部はRGBAのままですが、画素色を指定色数相当に量子化します。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="colorDepthOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
   <dialog id="softLensDialog" class="modal">
     <form method="dialog">
       <div class="dialog-head"><h2>ソフトレンズ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
@@ -779,7 +911,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.4.0</strong></p>
+        <p><strong>JTrim Web v0.5.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
