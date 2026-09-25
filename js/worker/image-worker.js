@@ -16,7 +16,8 @@ import {
   bevelImageData, silkScreenImageData,
   colorScaleImageData, rgbExchangeImageData, xorColorImageData,
   gradientImageData, shadowHighlightImageData, transparentColorImageData,
-  usedColorCount, colorDepthImageData
+  usedColorCount, colorDepthImageData,
+  redEyeImageData, denoiseImageData, densityExtractImageData
 } from "../engine/pixel.js";
 
 self.onmessage = event => {
@@ -162,6 +163,15 @@ self.onmessage = event => {
         break;
       case "colorDepth":
         result = colorDepthImageData(source, params.mode, params.dither);
+        break;
+      case "redEye":
+        result = redEyeImageData(source, params.selection, params.strength);
+        break;
+      case "denoise":
+        result = denoiseImageData(source, params.level, params.selection);
+        break;
+      case "densityExtract":
+        result = densityExtractImageData(source, params.mode, params.selection);
         break;
       case "usedColorCount": {
         const count = usedColorCount(source);
