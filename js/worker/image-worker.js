@@ -11,7 +11,9 @@ import {
   waveImageData, blockImageData, fadeImageData, oilPaintImageData,
   swirlImageData, radialWarpImageData, spotlightImageData,
   blindsImageData, supernovaImageData, rippleImageData,
-  newspaperImageData, customFilterImageData
+  newspaperImageData, customFilterImageData,
+  softenImageData, softLensImageData, motionBlurImageData,
+  bevelImageData, silkScreenImageData
 } from "../engine/pixel.js";
 
 self.onmessage = event => {
@@ -121,6 +123,21 @@ self.onmessage = event => {
         break;
       case "customFilter":
         result = customFilterImageData(source, params.kernel, params.divisor, params.offset, params.selection);
+        break;
+      case "soften":
+        result = softenImageData(source, params.selection);
+        break;
+      case "softLens":
+        result = softLensImageData(source, params.strength, params.selection);
+        break;
+      case "motionBlur":
+        result = motionBlurImageData(source, params.distance, params.angle, params.selection);
+        break;
+      case "bevel":
+        result = bevelImageData(source, params.width, params.inset, params.selection);
+        break;
+      case "silkScreen":
+        result = silkScreenImageData(source, params.cellSize, params.angle, params.selection);
         break;
       case "histogram": {
         const histogram = histogramData(source, params.selection);
