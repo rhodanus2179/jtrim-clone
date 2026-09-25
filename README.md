@@ -3,16 +3,64 @@
 JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代のブラウザ上に再実装するプロジェクトです。
 
 - インストール不要
-- GitHub Pages で配信
+- GitHub Pages で配信予定
 - 原則として画像処理はブラウザ内で完結
 - JTrim の軽さ・単純さ・直接操作感を重視
 - レイヤー型の高機能画像編集ソフトではなく「さっと画像を加工する道具」を目指す
 
 ## Status
 
-現在は原版 JTrim 1.53c の仕様調査・機能棚卸し段階です。
+ブラウザで操作できる最初の実装版（v0.1.0）まで進んでいます。
 
-詳細: [JTrim 1.53c 機能インベントリ](docs/jtrim-1.53c-feature-inventory.md)
+### 実装済み
+
+- 画像ファイルを開く / ドラッグ＆ドロップ
+- 新規画像作成
+- PNG / JPEG / WebP 保存
+- ズーム / ウィンドウに合わせる
+- 矩形選択
+  - ドラッグで作成
+  - 選択範囲の移動
+  - 四隅ハンドルで変更
+  - Ctrl + カーソルキーで1px移動
+  - Shift + カーソルキーで1px拡縮
+- 切り抜き
+- 左右90度回転
+- ミラー / フリップ
+- リサイズ
+  - サイズ指定
+  - 比率指定
+  - 縦横比保持
+  - 再サンプリング有無
+  - Box / Hermite / Triangle / Bell / Mitchell / BSpline / Lanczos3
+- グレースケール
+- セピア
+- ネガポジ反転
+- 明るさ / コントラスト（ライブプレビュー）
+- ガウスぼかし レベル1〜10（ライブプレビュー）
+- 文字入れ
+- Undo / Redo（16段階を基本）
+- JTrim準拠の主要ショートカット
+- GitHub Actions による JavaScript 構文チェック
+
+画素処理のうち、リサイズ方式・ガウスぼかし・明るさ/コントラストなどは、現段階では機能互換を優先した独自実装です。原版 JTrim との画素単位の比較・調整は後続フェーズで行います。
+
+## Run locally
+
+ES Modules を使用しているため、`index.html` を `file://` で直接開くのではなく、簡易 HTTP サーバーを使用してください。
+
+```bash
+python -m http.server 8000
+```
+
+その後、`http://localhost:8000/` を開きます。
+
+## Documentation
+
+- [JTrim 1.53c 機能インベントリ](docs/jtrim-1.53c-feature-inventory.md)
+- [実機スクリーンショットに基づくUIリファレンス](docs/ui-screenshot-reference.md)
+- [アーキテクチャ設計](docs/architecture.md)
+- [実装計画](docs/implementation-plan.md)
 
 ## Fidelity goals
 
