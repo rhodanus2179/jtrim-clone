@@ -5,6 +5,7 @@ export class SelectionController {
     this.state = state;
     this.onStatus = onStatus;
     this.drag = null;
+    this.lastStatusAt = 0;
 
     overlay.addEventListener("pointerdown", e => this.pointerDown(e));
     overlay.addEventListener("pointermove", e => this.pointerMove(e));
@@ -30,6 +31,10 @@ export class SelectionController {
 
   reportPointer(event) {
     if (!this.state.document) return;
+    const now = performance.now();
+    // Canvas readback can force synchronization. 30fps is ample for a status bar.
+    if (now - this.lastStatusAt < 33) return;
+    this.lastStatusAt = now;
     const p = this.pointFromEvent(event);
     const x = Math.max(0, Math.min(this.canvas.width - 1, Math.floor(p.x)));
     const y = Math.max(0, Math.min(this.canvas.height - 1, Math.floor(p.y)));
