@@ -72,14 +72,19 @@
             <hr>
             <button data-command="color.brightnessContrast">明るさ／コントラスト(B)…</button>
             <button data-command="color.rgb">RGBの度合い(R)…</button>
+            <button data-command="color.posterize">ポスタライズ(T)…</button>
+            <button data-command="color.solarize">ソラリゼーション(L)…</button>
             <button data-command="color.gamma">ガンマ補正(M)…</button>
             <button data-command="color.hsv">HSVカラー調整(H)…</button>
+            <button data-command="color.threshold">2階調化(W)…</button>
           </div>
         </div>
         <div class="menu">
           <button class="menu-trigger">加工(T)</button>
           <div class="menu-popup">
             <button data-command="filter.sharpen">シャープにする(S)…</button>
+            <button data-command="filter.emboss">エンボス(B)…</button>
+            <button data-command="filter.edgeEnhance">エッジの強調(H)…</button>
             <button data-command="filter.gaussianBlur">ガウスぼかし(G)…</button>
             <button data-command="filter.mosaic">モザイク(I)…</button>
             <hr>
@@ -344,6 +349,57 @@
         <label class="slider-row"><span>ブロックサイズ</span><input id="mosaicRange" type="range" min="2" max="100" value="10"><input id="mosaicNumber" type="number" min="2" max="200" value="10"></label>
       </div>
       <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="mosaicOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="posterizeDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ポスタライズ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>階調数</span><input id="posterizeRange" type="range" min="2" max="32" value="8"><input id="posterizeNumber" type="number" min="2" max="64" value="8"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="posterizeOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="solarizeDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ソラリゼーション</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>しきい値</span><input id="solarizeRange" type="range" min="0" max="255" value="128"><input id="solarizeNumber" type="number" min="0" max="255" value="128"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="solarizeOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="thresholdDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>2階調化</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>しきい値</span><input id="thresholdRange" type="range" min="0" max="255" value="128"><input id="thresholdNumber" type="number" min="0" max="255" value="128"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="thresholdOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="embossDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>エンボス</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>レベル (1～20)</span><input id="embossRange" type="range" min="1" max="20" value="3"><input id="embossNumber" type="number" min="1" max="20" value="3"></label>
+        <label class="check-row"><input id="embossColor" type="checkbox"> 色付き</label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="embossOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="edgeEnhanceDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>エッジの強調</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>レベル (1～20)</span><input id="edgeEnhanceRange" type="range" min="1" max="20" value="3"><input id="edgeEnhanceNumber" type="number" min="1" max="20" value="3"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="edgeEnhanceOk" value="default">OK</button></div>
     </form>
   </dialog>
 
