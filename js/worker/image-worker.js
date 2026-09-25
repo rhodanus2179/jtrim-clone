@@ -4,7 +4,10 @@ import {
   gammaImageData, rgbAdjustImageData, hsvAdjustImageData,
   sharpenImageData, mosaicImageData,
   posterizeImageData, solarizeImageData, thresholdImageData,
-  embossImageData, edgeEnhanceImageData
+  embossImageData, edgeEnhanceImageData,
+  histogramData, normalizeImageData, equalizeImageData,
+  edgeExtractImageData, noiseImageData, diffuseImageData,
+  glassImageData, pencilImageData, floodFillImageData
 } from "../engine/pixel.js";
 
 self.onmessage = event => {
@@ -55,6 +58,35 @@ self.onmessage = event => {
       case "edgeEnhance":
         result = edgeEnhanceImageData(source, params.level, params.selection);
         break;
+      case "normalize":
+        result = normalizeImageData(source, params.selection);
+        break;
+      case "equalize":
+        result = equalizeImageData(source, params.selection);
+        break;
+      case "edgeExtract":
+        result = edgeExtractImageData(source, params.level, params.selection);
+        break;
+      case "noise":
+        result = noiseImageData(source, params.amount, params.color, params.selection);
+        break;
+      case "diffuse":
+        result = diffuseImageData(source, params.radius, params.selection);
+        break;
+      case "glass":
+        result = glassImageData(source, params.size, params.direction, params.selection);
+        break;
+      case "pencil":
+        result = pencilImageData(source, params.selection);
+        break;
+      case "floodFill":
+        result = floodFillImageData(source, params.x, params.y, params.color, params.tolerance, params.opacity);
+        break;
+      case "histogram": {
+        const histogram = histogramData(source, params.selection);
+        self.postMessage({ id, resultType: "histogram", payload: histogram });
+        return;
+      }
       default:
         throw new Error(`Unknown image operation: ${operation}`);
     }
