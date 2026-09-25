@@ -75,6 +75,11 @@
             <button data-command="image.margin">余白作成(W)…</button>
             <button data-command="image.shadow">影をつける(D)…</button>
             <hr>
+            <button data-command="image.denoise">ノイズ除去(Y)…</button>
+            <button data-command="image.densityMin">最小濃度抽出</button>
+            <button data-command="image.densityMedian">中間濃度抽出</button>
+            <button data-command="image.densityMax">最大濃度抽出</button>
+            <hr>
             <button data-command="image.transparentColor">透過色設定(G)…</button>
             <button data-command="image.toggleTransparency">透過状態を表示(B)</button>
           </div>
@@ -98,6 +103,7 @@
             <button data-command="color.xor">XORカラー変換(X)</button>
             <button data-command="color.gradient">グラデーション(Q)…</button>
             <button data-command="color.shadowHighlight">シャドウ・ハイライトの明るさ(A)…</button>
+            <button data-command="color.redEye">赤目補正(E)…</button>
             <hr>
             <button data-command="color.histogram">ヒストグラム表示…</button>
             <button data-command="color.normalize">ノーマライズ</button>
@@ -660,6 +666,28 @@
         <p class="help-text">JTrimの透過色指定は単一色が基本です。Web版では必要に応じ許容範囲も指定できます。</p>
       </div>
       <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="transparentColorOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+
+  <dialog id="denoiseDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ノイズ除去</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>レベル (1～5)</span><input id="denoiseRange" type="range" min="1" max="5" value="1"><input id="denoiseNumber" type="number" min="1" max="5" value="1"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="denoiseOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="redEyeDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>赤目補正</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>補正強度</span><input id="redEyeRange" type="range" min="0" max="100" value="80"><input id="redEyeNumber" type="number" min="0" max="100" value="80"></label>
+        <p class="help-text">JTrimと同様、赤目部分を先に矩形選択してから実行するのがおすすめです。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="redEyeOk" value="default">OK</button></div>
     </form>
   </dialog>
 
