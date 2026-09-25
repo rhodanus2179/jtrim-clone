@@ -2,7 +2,9 @@ import { nearestNeighborResize, resizeImageData } from "../engine/resample.js";
 import {
   brightnessContrastImageData, gaussianBlurImageData,
   gammaImageData, rgbAdjustImageData, hsvAdjustImageData,
-  sharpenImageData, mosaicImageData
+  sharpenImageData, mosaicImageData,
+  posterizeImageData, solarizeImageData, thresholdImageData,
+  embossImageData, edgeEnhanceImageData
 } from "../engine/pixel.js";
 
 self.onmessage = event => {
@@ -37,6 +39,21 @@ self.onmessage = event => {
         break;
       case "mosaic":
         result = mosaicImageData(source, params.blockSize, params.selection);
+        break;
+      case "posterize":
+        result = posterizeImageData(source, params.levels, params.selection);
+        break;
+      case "solarize":
+        result = solarizeImageData(source, params.threshold, params.selection);
+        break;
+      case "threshold":
+        result = thresholdImageData(source, params.threshold, params.selection);
+        break;
+      case "emboss":
+        result = embossImageData(source, params.level, params.selection, params.color);
+        break;
+      case "edgeEnhance":
+        result = edgeEnhanceImageData(source, params.level, params.selection);
         break;
       default:
         throw new Error(`Unknown image operation: ${operation}`);
