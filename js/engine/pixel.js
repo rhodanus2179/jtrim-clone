@@ -865,6 +865,118 @@ export function customFilterImageData(source, kernel, divisor = 1, offset = 0, s
   return convolve3x3(source, k, divisor, offset, selection, false);
 }
 
+
+export function softenImageData(source, selection = null) {
+  return convolve3x3(source, [1,1,1,1,1,1,1,1,1], 9, 0, selection, false);
+}
+
+export function softLensImageData(source, strength = 5, selection = null) {
+  strength = Math.max(1, Math.min(10, Number(strength) || 5));
+  const blurred = gaussianBlurImageData(source, Math.max(1, strength / 2), selection);
+  const out = cloneImageData(source);
+  const dst = out.data, src = source.data, blur = blurred.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  const alpha = Math.min(.8, strength / 12);
+
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      dst[i] = clamp255(src[i] * (1 - alpha) + blur[i] * alpha + strength * 0.7);
+      dst[i + 1] = clamp255(src[i + 1] * (1 - alpha) + blur[i + 1] * alpha + strength * 0.7);
+      dst[i + 2] = clamp255(src[i + 2] * (1 - alpha) + blur[i + 2] * alpha + strength * 0.7);
+    }
+  }
+  return out;
+}
+
+export function motionBlurImageData(source, distance = 8, angle = 0, selection = null) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width, h = source.height;
+  const b = regionBounds(source, selection);
+  distance = Math.max(1, Math.min(100, Math.round(Number(distance) || 8)));
+  const rad = Number(angle) * Math.PI / 180;
+  const dx = Math.cos(rad), dy = Math.sin(rad);
+  const samples = Math.min(31, distance * 2 + 1);
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const di = (y * w + x) * 4;
+      let rr = 0, gg = 0, bb = 0, aa = 0, count = 0;
+      for (let n = 0; n < samples; n++) {
+        const t = (n / Math.max(1, samples - 1) - .5) * distance;
+        const sx = x + dx * t, sy = y + dy * t;
+        if (sx < b.x0 || sx >= b.x1 || sy < b.y0 || sy >= b.y1) continue;
+        rr += sampleBilinear(src, w, h, sx, sy, 0);
+        gg += sampleBilinear(src, w, h, sx, sy, 1);
+        bb += sampleBilinear(src, w, h, sx, sy, 2);
+        aa += sampleBilinear(src, w, h, sx, sy, 3);
+        count++;
+      }
+      if (count) {
+        dst[di] = clamp255(rr / count);
+        dst[di + 1] = clamp255(gg / count);
+        dst[di + 2] = clamp255(bb / count);
+        dst[di + 3] = clamp255(aa / count);
+      }
+    }
+  }
+  return out;
+}
+
+export function bevelImageData(source, width = 8, inset = false, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  width = Math.max(1, Math.min(100, Math.round(Number(width) || 8)));
+  const sign = inset ? -1 : 1;
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const left = x - b.x0;
+      const right = b.x1 - 1 - x;
+      const top = y - b.y0;
+      const bottom = b.y1 - 1 - y;
+      let shade = 0;
+      if (top < width) shade += sign * (1 - top / width) * 70;
+      if (left < width) shade += sign * (1 - left / width) * 70;
+      if (bottom < width) shade -= sign * (1 - bottom / width) * 70;
+      if (right < width) shade -= sign * (1 - right / width) * 70;
+      if (!shade) continue;
+      const i = (y * source.width + x) * 4;
+      d[i] = clamp255(d[i] + shade);
+      d[i + 1] = clamp255(d[i + 1] + shade);
+      d[i + 2] = clamp255(d[i + 2] + shade);
+    }
+  }
+  return out;
+}
+
+export function silkScreenImageData(source, cellSize = 5, angle = 45, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  cellSize = Math.max(2, Math.min(30, Math.round(Number(cellSize) || 5)));
+  const rad = Number(angle) * Math.PI / 180;
+  const cs = Math.cos(rad), sn = Math.sin(rad);
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const i = (y * source.width + x) * 4;
+      const gray = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      const u = (x * cs + y * sn) / cellSize;
+      const v = (-x * sn + y * cs) / cellSize;
+      const fx = u - Math.floor(u) - .5;
+      const fy = v - Math.floor(v) - .5;
+      const radius = Math.sqrt(Math.max(0, 1 - gray)) * .52;
+      const ink = Math.hypot(fx, fy) < radius ? 0 : 255;
+      d[i] = d[i + 1] = d[i + 2] = ink;
+    }
+  }
+  return out;
+}
+
 function gaussianKernel(level) {
   const radius = Math.max(1, Math.round(level));
   const sigma = Math.max(.65, level * .72);
