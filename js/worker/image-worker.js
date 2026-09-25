@@ -7,7 +7,11 @@ import {
   embossImageData, edgeEnhanceImageData,
   histogramData, normalizeImageData, equalizeImageData,
   edgeExtractImageData, noiseImageData, diffuseImageData,
-  glassImageData, pencilImageData, floodFillImageData
+  glassImageData, pencilImageData, floodFillImageData,
+  waveImageData, blockImageData, fadeImageData, oilPaintImageData,
+  swirlImageData, radialWarpImageData, spotlightImageData,
+  blindsImageData, supernovaImageData, rippleImageData,
+  newspaperImageData, customFilterImageData
 } from "../engine/pixel.js";
 
 self.onmessage = event => {
@@ -81,6 +85,42 @@ self.onmessage = event => {
         break;
       case "floodFill":
         result = floodFillImageData(source, params.x, params.y, params.color, params.tolerance, params.opacity);
+        break;
+      case "wave":
+        result = waveImageData(source, params.amplitude, params.wavelength, params.direction, params.selection);
+        break;
+      case "block":
+        result = blockImageData(source, params.size, params.stagger, params.border, params.selection);
+        break;
+      case "fade":
+        result = fadeImageData(source, params.strength, params.shape, params.color, params.selection);
+        break;
+      case "oilPaint":
+        result = oilPaintImageData(source, params.radius, params.levels, params.selection);
+        break;
+      case "swirl":
+        result = swirlImageData(source, params.degrees, params.selection);
+        break;
+      case "radialWarp":
+        result = radialWarpImageData(source, params.strength, params.selection);
+        break;
+      case "spotlight":
+        result = spotlightImageData(source, params.centerX, params.centerY, params.radius, params.strength, params.selection);
+        break;
+      case "blinds":
+        result = blindsImageData(source, params.width, params.color, params.opacity, params.direction, params.selection);
+        break;
+      case "supernova":
+        result = supernovaImageData(source, params.centerX, params.centerY, params.radius, params.rays, params.color, params.randomHue, params.selection);
+        break;
+      case "ripple":
+        result = rippleImageData(source, params.amplitude, params.wavelength, params.selection);
+        break;
+      case "newspaper":
+        result = newspaperImageData(source, params.cellSize, params.selection);
+        break;
+      case "customFilter":
+        result = customFilterImageData(source, params.kernel, params.divisor, params.offset, params.selection);
         break;
       case "histogram": {
         const histogram = histogramData(source, params.selection);
