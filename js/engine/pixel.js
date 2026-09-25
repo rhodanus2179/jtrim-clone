@@ -160,6 +160,119 @@ export function mosaicImageData(source, blockSize = 8, selection = null) {
   return out;
 }
 
+
+export function posterizeImageData(source, levels = 8, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  levels = Math.max(2, Math.min(64, Math.round(Number(levels) || 8)));
+  const steps = levels - 1;
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      d[i] = Math.round(Math.round(d[i] / 255 * steps) / steps * 255);
+      d[i + 1] = Math.round(Math.round(d[i + 1] / 255 * steps) / steps * 255);
+      d[i + 2] = Math.round(Math.round(d[i + 2] / 255 * steps) / steps * 255);
+    }
+  }
+  return out;
+}
+
+export function solarizeImageData(source, threshold = 128, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  threshold = Math.max(0, Math.min(255, Math.round(Number(threshold) || 0)));
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      if (d[i] >= threshold) d[i] = 255 - d[i];
+      if (d[i + 1] >= threshold) d[i + 1] = 255 - d[i + 1];
+      if (d[i + 2] >= threshold) d[i + 2] = 255 - d[i + 2];
+    }
+  }
+  return out;
+}
+
+export function thresholdImageData(source, threshold = 128, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  threshold = Math.max(0, Math.min(255, Math.round(Number(threshold) || 0)));
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = luma >= threshold ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+  }
+  return out;
+}
+
+function convolve3x3(source, kernel, divisor = 1, offset = 0, selection = null, monochrome = false) {
+  const out = cloneImageData(source);
+  const src = source.data;
+  const dst = out.data;
+  const w = source.width, h = source.height;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * w + x) * 4;
+      let rr = 0, gg = 0, bb = 0;
+      let ki = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        const sy = Math.max(0, Math.min(h - 1, y + ky));
+        for (let kx = -1; kx <= 1; kx++) {
+          const sx = Math.max(0, Math.min(w - 1, x + kx));
+          const si = (sy * w + sx) * 4;
+          const weight = kernel[ki++];
+          rr += src[si] * weight;
+          gg += src[si + 1] * weight;
+          bb += src[si + 2] * weight;
+        }
+      }
+      if (monochrome) {
+        const v = clamp255((0.299 * rr + 0.587 * gg + 0.114 * bb) / divisor + offset);
+        dst[i] = dst[i + 1] = dst[i + 2] = v;
+      } else {
+        dst[i] = clamp255(rr / divisor + offset);
+        dst[i + 1] = clamp255(gg / divisor + offset);
+        dst[i + 2] = clamp255(bb / divisor + offset);
+      }
+    }
+  }
+  return out;
+}
+
+export function embossImageData(source, level = 3, selection = null, color = false) {
+  const amount = Math.max(1, Math.min(20, Number(level) || 1));
+  const k = amount / 3;
+  return convolve3x3(
+    source,
+    [-2 * k, -k, 0, -k, 1, k, 0, k, 2 * k],
+    1,
+    128,
+    selection,
+    !color
+  );
+}
+
+export function edgeEnhanceImageData(source, level = 3, selection = null) {
+  const amount = Math.max(1, Math.min(20, Number(level) || 1)) / 5;
+  return convolve3x3(
+    source,
+    [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0],
+    1,
+    0,
+    selection,
+    false
+  );
+}
+
 function gaussianKernel(level) {
   const radius = Math.max(1, Math.round(level));
   const sigma = Math.max(.65, level * .72);
