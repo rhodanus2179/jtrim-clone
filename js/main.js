@@ -4,7 +4,8 @@ import { CommandRegistry } from "./commands.js";
 import { SelectionController } from "./selection.js";
 import { createBlankCanvas, decodeFileToCanvas, saveCanvas } from "./io/files.js";
 import {
-  cropCanvas, rotate90, rotateArbitrary, flipCanvas, addMargin,
+  cropCanvas, coordinateCrop, circularCrop, roundedCrop,
+  rotate90, rotateArbitrary, flipCanvas, shiftCanvas, addMargin, addShadow,
   copyRegion, clearRegion, pasteCanvas, compositeCanvas, joinCanvas,
   grayscale, sepia, invert, drawText
 } from "./engine/operations.js";
@@ -35,6 +36,7 @@ let internalClipboard = null;
 let joinSourceCanvas = null;
 let compositeSourceCanvas = null;
 let histogramResult = null;
+let showTransparency = false;
 
 const selection = new SelectionController({
   canvas,
@@ -330,6 +332,18 @@ function setupCommands() {
       enabled: documentReady,
       run: openResizeDialog
     })
+    .register("image.circleCrop", {
+      enabled: documentReady,
+      run: () => openShapeCropDialog("ellipse")
+    })
+    .register("image.roundedCrop", {
+      enabled: documentReady,
+      run: () => openShapeCropDialog("rounded")
+    })
+    .register("image.coordinateCrop", {
+      enabled: documentReady,
+      run: openCoordinateCropDialog
+    })
     .register("image.rotateLeft", {
       enabled: documentReady,
       run: () => mutate("左へ90度回転", () => rotate90(canvas, "left"), { clearSelection: true })
@@ -350,9 +364,29 @@ function setupCommands() {
       enabled: documentReady,
       run: () => mutate("フリップ", () => flipCanvas(canvas, "vertical"))
     })
+    .register("image.shift", {
+      enabled: documentReady,
+      run: () => $("#shiftDialog").showModal()
+    })
     .register("image.margin", {
       enabled: documentReady,
       run: () => $("#marginDialog").showModal()
+    })
+    .register("image.shadow", {
+      enabled: documentReady,
+      run: () => $("#shadowDialog").showModal()
+    })
+    .register("image.transparentColor", {
+      enabled: documentReady,
+      run: openTransparentColorDialog
+    })
+    .register("image.toggleTransparency", {
+      enabled: documentReady,
+      run: () => {
+        showTransparency = !showTransparency;
+        stage.classList.toggle("show-transparency", showTransparency);
+        setMessage(showTransparency ? "透過状態を表示します" : "透過状態表示を解除しました");
+      }
     })
     .register("color.grayscale", {
       enabled: documentReady,
@@ -365,6 +399,10 @@ function setupCommands() {
     .register("color.invert", {
       enabled: documentReady,
       run: () => mutate("ネガポジ反転", () => invert(canvas, state.selection))
+    })
+    .register("color.colorScale", {
+      enabled: documentReady,
+      run: openColorScaleDialog
     })
     .register("color.brightnessContrast", {
       enabled: documentReady,
@@ -394,6 +432,22 @@ function setupCommands() {
       enabled: documentReady,
       run: openThresholdDialog
     })
+    .register("color.rgbExchange", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("RGB交換", "rgbExchange", {})
+    })
+    .register("color.xor", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("XORカラー変換", "xorColor", {})
+    })
+    .register("color.gradient", {
+      enabled: documentReady,
+      run: openGradientDialog
+    })
+    .register("color.shadowHighlight", {
+      enabled: documentReady,
+      run: openShadowHighlightDialog
+    })
     .register("color.histogram", {
       enabled: documentReady,
       run: openHistogramDialog
@@ -405,6 +459,14 @@ function setupCommands() {
     .register("color.equalize", {
       enabled: documentReady,
       run: () => applyWorkerOperation("イコライズ", "equalize", {})
+    })
+    .register("color.usedCount", {
+      enabled: documentReady,
+      run: showUsedColorCount
+    })
+    .register("color.depth", {
+      enabled: documentReady,
+      run: () => $("#colorDepthDialog").showModal()
     })
     .register("filter.soften", {
       enabled: documentReady,
@@ -1401,6 +1463,223 @@ function setupGlassDialog() {
 
 
 
+
+function openShapeCropDialog(mode) {
+  $("#shapeCropDialog").dataset.mode = mode;
+  $("#shapeCropTitle").textContent = mode === "ellipse" ? "円形切り抜き" : "角丸切り抜き";
+  $("#shapeRadiusRow").hidden = mode === "ellipse";
+  $("#shapeRadiusRange").value = $("#shapeRadiusNumber").value = 24;
+  $("#shapeBorder").checked = false;
+  $("#shapeShadow").checked = false;
+  $("#shapeCropDialog").showModal();
+}
+
+function setupShapeCropDialog() {
+  bindRangeAndNumber("#shapeRadiusRange", "#shapeRadiusNumber", () => {});
+  $("#shapeCropOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const mode = $("#shapeCropDialog").dataset.mode || "ellipse";
+    const options = {
+      background: $("#shapeBackground").value,
+      radius: Number($("#shapeRadiusNumber").value),
+      border: $("#shapeBorder").checked,
+      borderWidth: Number($("#shapeBorderWidth").value),
+      borderColor: $("#shapeBorderColor").value,
+      shadow: $("#shapeShadow").checked,
+      shadowOffsetX: Number($("#shapeShadowX").value),
+      shadowOffsetY: Number($("#shapeShadowY").value),
+      shadowBlur: Number($("#shapeShadowBlur").value),
+      shadowOpacity: Number($("#shapeShadowOpacity").value),
+      shadowColor: $("#shapeShadowColor").value
+    };
+    $("#shapeCropDialog").close();
+    await mutate(mode === "ellipse" ? "円形切り抜き" : "角丸切り抜き", () => {
+      if (mode === "ellipse") circularCrop(canvas, state.selection, options);
+      else roundedCrop(canvas, state.selection, options);
+    }, { clearSelection: true });
+  });
+}
+
+function openCoordinateCropDialog() {
+  const r = state.selection || { x: 0, y: 0, width: canvas.width, height: canvas.height };
+  $("#coordX").value = Math.round(r.x);
+  $("#coordY").value = Math.round(r.y);
+  $("#coordWidth").value = Math.round(r.width);
+  $("#coordHeight").value = Math.round(r.height);
+  $("#coordinateCropDialog").showModal();
+}
+
+function setupCoordinateCropDialog() {
+  $("#coordinateCropOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const params = {
+      x: Number($("#coordX").value),
+      y: Number($("#coordY").value),
+      width: Number($("#coordWidth").value),
+      height: Number($("#coordHeight").value)
+    };
+    $("#coordinateCropDialog").close();
+    await mutate("座標指定切り抜き", () => coordinateCrop(canvas, params.x, params.y, params.width, params.height), { clearSelection: true });
+  });
+}
+
+function setupShiftDialog() {
+  $("#shiftOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const dx = Number($("#shiftX").value);
+    const dy = Number($("#shiftY").value);
+    $("#shiftDialog").close();
+    await mutate("シフト", () => shiftCanvas(canvas, dx, dy), { clearSelection: true });
+  });
+}
+
+function setupShadowDialog() {
+  bindRangeAndNumber("#shadowOpacityRange", "#shadowOpacityNumber", () => {});
+  $("#shadowOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const options = {
+      offsetX: Number($("#shadowX").value),
+      offsetY: Number($("#shadowY").value),
+      blur: Number($("#shadowBlur").value),
+      opacity: Number($("#shadowOpacityNumber").value),
+      color: $("#shadowColor").value
+    };
+    $("#shadowDialog").close();
+    await mutate("影をつける", () => addShadow(canvas, state.selection, options));
+  });
+}
+
+function openTransparentColorDialog() {
+  $("#transparentToleranceRange").value = $("#transparentToleranceNumber").value = 0;
+  $("#transparentColorDialog").showModal();
+}
+
+function setupTransparentColorDialog() {
+  bindRangeAndNumber("#transparentToleranceRange", "#transparentToleranceNumber", () => {});
+  $("#transparentColorOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const params = {
+      color: $("#transparentColor").value,
+      tolerance: Number($("#transparentToleranceNumber").value)
+    };
+    $("#transparentColorDialog").close();
+    await applyWorkerOperation("透過色設定", "transparentColor", params);
+    showTransparency = true;
+    stage.classList.add("show-transparency");
+  });
+}
+
+function openColorScaleDialog() {
+  beginPreview(500_000);
+  scheduleWorkerPreview("colorScale", { color: $("#colorScaleColor").value }, 50);
+  $("#colorScaleDialog").showModal();
+}
+
+function setupColorScaleDialog() {
+  $("#colorScaleColor").addEventListener("input", () => scheduleWorkerPreview("colorScale", { color: $("#colorScaleColor").value }, 50));
+  $("#colorScaleOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const color = $("#colorScaleColor").value;
+    $("#colorScaleDialog").close();
+    await applyWorkerOperation("単色カラースケール", "colorScale", { color });
+  });
+  $("#colorScaleDialog").addEventListener("close", hidePreview);
+  $("#colorScaleDialog").addEventListener("cancel", hidePreview);
+}
+
+function openGradientDialog() {
+  $("#gradientOpacityRange").value = $("#gradientOpacityNumber").value = 50;
+  beginPreview(500_000);
+  scheduleWorkerPreview("gradient", {
+    startColor: $("#gradientStart").value,
+    endColor: $("#gradientEnd").value,
+    direction: $("#gradientDirection").value,
+    opacity: 50
+  }, 50);
+  $("#gradientDialog").showModal();
+}
+
+function setupGradientDialog() {
+  const render = () => scheduleWorkerPreview("gradient", {
+    startColor: $("#gradientStart").value,
+    endColor: $("#gradientEnd").value,
+    direction: $("#gradientDirection").value,
+    opacity: Number($("#gradientOpacityNumber").value)
+  }, 50);
+  bindRangeAndNumber("#gradientOpacityRange", "#gradientOpacityNumber", render);
+  $("#gradientStart").addEventListener("input", render);
+  $("#gradientEnd").addEventListener("input", render);
+  $("#gradientDirection").addEventListener("change", render);
+  $("#gradientOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      startColor: $("#gradientStart").value,
+      endColor: $("#gradientEnd").value,
+      direction: $("#gradientDirection").value,
+      opacity: Number($("#gradientOpacityNumber").value)
+    };
+    $("#gradientDialog").close();
+    await applyWorkerOperation("グラデーション", "gradient", params);
+  });
+  $("#gradientDialog").addEventListener("close", hidePreview);
+  $("#gradientDialog").addEventListener("cancel", hidePreview);
+}
+
+function openShadowHighlightDialog() {
+  $("#shadowsRange").value = $("#shadowsNumber").value = 0;
+  $("#highlightsRange").value = $("#highlightsNumber").value = 0;
+  beginPreview(500_000);
+  $("#shadowHighlightDialog").showModal();
+}
+
+function setupShadowHighlightDialog() {
+  const render = () => scheduleWorkerPreview("shadowHighlight", {
+    shadows: Number($("#shadowsNumber").value),
+    highlights: Number($("#highlightsNumber").value)
+  }, 60);
+  bindRangeAndNumber("#shadowsRange", "#shadowsNumber", render);
+  bindRangeAndNumber("#highlightsRange", "#highlightsNumber", render);
+  $("#shadowHighlightOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      shadows: Number($("#shadowsNumber").value),
+      highlights: Number($("#highlightsNumber").value)
+    };
+    $("#shadowHighlightDialog").close();
+    await applyWorkerOperation("シャドウ・ハイライトの明るさ", "shadowHighlight", params);
+  });
+  $("#shadowHighlightDialog").addEventListener("close", hidePreview);
+  $("#shadowHighlightDialog").addEventListener("cancel", hidePreview);
+}
+
+async function showUsedColorCount() {
+  try {
+    setMessage("使用色数を計算しています…");
+    const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+    const count = await imageWorker.run("usedColorCount", source, {});
+    setMessage(`使用色数: ${count.toLocaleString()}`);
+    alert(`使用色数: ${count.toLocaleString()} 色`);
+  } catch (error) {
+    console.error(error);
+    alert("使用色数を計算できませんでした。");
+  }
+}
+
+function setupColorDepthDialog() {
+  $("#colorDepthOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const params = {
+      mode: $("#colorDepthMode").value,
+      dither: $("#colorDepthDither").checked
+    };
+    $("#colorDepthDialog").close();
+    await applyWorkerOperation("色解像度の変更", "colorDepth", params, { clearSelection: true });
+  });
+}
+
 function openSoftLensDialog() {
   $("#softLensRange").value = $("#softLensNumber").value = 5;
   beginPreview(260_000);
@@ -1975,6 +2254,7 @@ function setupKeyboard() {
     else if (ctrl && key === "a") command = "edit.selectAll";
     else if (ctrl && key === "r") command = "image.resize";
     else if (ctrl && key === "t") command = "image.crop";
+    else if (ctrl && key === "u") command = "image.coordinateCrop";
     else if (ctrl && key === "m") command = "image.flipH";
     else if (ctrl && key === "f") command = "image.flipV";
     else if (ctrl && key === "g") command = "color.grayscale";
@@ -2005,6 +2285,15 @@ setupAdjustDialog();
 setupBlurDialog();
 setupRotateDialog();
 setupMarginDialog();
+setupShapeCropDialog();
+setupCoordinateCropDialog();
+setupShiftDialog();
+setupShadowDialog();
+setupTransparentColorDialog();
+setupColorScaleDialog();
+setupGradientDialog();
+setupShadowHighlightDialog();
+setupColorDepthDialog();
 setupGammaDialog();
 setupRgbDialog();
 setupHsvDialog();
