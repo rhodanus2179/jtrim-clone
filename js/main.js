@@ -446,6 +446,58 @@ function setupCommands() {
       enabled: documentReady,
       run: () => applyWorkerOperation("鉛筆画", "pencil", {})
     })
+    .register("filter.wave", {
+      enabled: documentReady,
+      run: openWaveDialog
+    })
+    .register("filter.block", {
+      enabled: documentReady,
+      run: openBlockDialog
+    })
+    .register("filter.fade", {
+      enabled: documentReady,
+      run: openFadeDialog
+    })
+    .register("filter.oilPaint", {
+      enabled: documentReady,
+      run: openOilPaintDialog
+    })
+    .register("filter.swirl", {
+      enabled: documentReady,
+      run: openSwirlDialog
+    })
+    .register("filter.punch", {
+      enabled: documentReady,
+      run: () => openRadialWarpDialog("punch")
+    })
+    .register("filter.pinch", {
+      enabled: documentReady,
+      run: () => openRadialWarpDialog("pinch")
+    })
+    .register("filter.spotlight", {
+      enabled: documentReady,
+      run: openSpotlightDialog
+    })
+    .register("filter.blinds", {
+      enabled: documentReady,
+      run: openBlindsDialog
+    })
+    .register("filter.supernova", {
+      enabled: documentReady,
+      run: openSupernovaDialog
+    })
+    .register("filter.ripple", {
+      enabled: documentReady,
+      run: openRippleDialog
+    })
+    .register("filter.newspaper", {
+      enabled: documentReady,
+      run: openNewspaperDialog
+    })
+    .register("filter.custom", {
+      enabled: documentReady,
+      run: openCustomFilterDialog
+    })
     .register("edit.text", {
       enabled: documentReady,
       run: openTextDialog
@@ -1327,6 +1379,414 @@ function setupGlassDialog() {
   $("#glassDialog").addEventListener("cancel", hidePreview);
 }
 
+
+function openWaveDialog() {
+  $("#waveAmplitudeRange").value = $("#waveAmplitudeNumber").value = 12;
+  $("#waveLengthRange").value = $("#waveLengthNumber").value = 48;
+  $("#waveDirection").value = "horizontal";
+  beginPreview(300_000);
+  scheduleWorkerPreview("wave", { amplitude: 12, wavelength: 48, direction: "horizontal" }, 90);
+  $("#waveDialog").showModal();
+}
+
+function setupWaveDialog() {
+  const render = () => scheduleWorkerPreview("wave", {
+    amplitude: Number($("#waveAmplitudeNumber").value) * previewScale,
+    wavelength: Math.max(2, Number($("#waveLengthNumber").value) * previewScale),
+    direction: $("#waveDirection").value
+  }, 90);
+  bindRangeAndNumber("#waveAmplitudeRange", "#waveAmplitudeNumber", render);
+  bindRangeAndNumber("#waveLengthRange", "#waveLengthNumber", render);
+  $("#waveDirection").addEventListener("change", render);
+  $("#waveOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      amplitude: Number($("#waveAmplitudeNumber").value),
+      wavelength: Number($("#waveLengthNumber").value),
+      direction: $("#waveDirection").value
+    };
+    $("#waveDialog").close();
+    await applyWorkerOperation("ウェーブ", "wave", params);
+  });
+  $("#waveDialog").addEventListener("close", hidePreview);
+  $("#waveDialog").addEventListener("cancel", hidePreview);
+}
+
+function openBlockDialog() {
+  $("#blockSizeRange").value = $("#blockSizeNumber").value = 12;
+  $("#blockStagger").checked = false;
+  $("#blockBorder").checked = false;
+  beginPreview(360_000);
+  scheduleWorkerPreview("block", { size: 12, stagger: false, border: false }, 70);
+  $("#blockDialog").showModal();
+}
+
+function setupBlockDialog() {
+  const render = () => scheduleWorkerPreview("block", {
+    size: Math.max(2, Number($("#blockSizeNumber").value) * previewScale),
+    stagger: $("#blockStagger").checked,
+    border: $("#blockBorder").checked
+  }, 70);
+  bindRangeAndNumber("#blockSizeRange", "#blockSizeNumber", render);
+  $("#blockStagger").addEventListener("change", render);
+  $("#blockBorder").addEventListener("change", render);
+  $("#blockOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      size: Number($("#blockSizeNumber").value),
+      stagger: $("#blockStagger").checked,
+      border: $("#blockBorder").checked
+    };
+    $("#blockDialog").close();
+    await applyWorkerOperation("ブロック", "block", params);
+  });
+  $("#blockDialog").addEventListener("close", hidePreview);
+  $("#blockDialog").addEventListener("cancel", hidePreview);
+}
+
+function openFadeDialog() {
+  $("#fadeStrengthRange").value = $("#fadeStrengthNumber").value = 100;
+  $("#fadeShape").value = "ellipse";
+  beginPreview(360_000);
+  scheduleWorkerPreview("fade", { strength: 100, shape: "ellipse", color: $("#fadeColor").value }, 60);
+  $("#fadeDialog").showModal();
+}
+
+function setupFadeDialog() {
+  const render = () => scheduleWorkerPreview("fade", {
+    strength: Number($("#fadeStrengthNumber").value),
+    shape: $("#fadeShape").value,
+    color: $("#fadeColor").value
+  }, 60);
+  bindRangeAndNumber("#fadeStrengthRange", "#fadeStrengthNumber", render);
+  $("#fadeShape").addEventListener("change", render);
+  $("#fadeColor").addEventListener("input", render);
+  $("#fadeOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      strength: Number($("#fadeStrengthNumber").value),
+      shape: $("#fadeShape").value,
+      color: $("#fadeColor").value
+    };
+    $("#fadeDialog").close();
+    await applyWorkerOperation("フェードアウト", "fade", params);
+  });
+  $("#fadeDialog").addEventListener("close", hidePreview);
+  $("#fadeDialog").addEventListener("cancel", hidePreview);
+}
+
+function openOilPaintDialog() {
+  $("#oilRadiusRange").value = $("#oilRadiusNumber").value = 3;
+  $("#oilLevelsRange").value = $("#oilLevelsNumber").value = 24;
+  beginPreview(160_000);
+  scheduleWorkerPreview("oilPaint", { radius: 3, levels: 24 }, 150);
+  $("#oilPaintDialog").showModal();
+}
+
+function setupOilPaintDialog() {
+  const render = () => scheduleWorkerPreview("oilPaint", {
+    radius: Number($("#oilRadiusNumber").value),
+    levels: Number($("#oilLevelsNumber").value)
+  }, 180);
+  bindRangeAndNumber("#oilRadiusRange", "#oilRadiusNumber", render);
+  bindRangeAndNumber("#oilLevelsRange", "#oilLevelsNumber", render);
+  $("#oilPaintOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      radius: Number($("#oilRadiusNumber").value),
+      levels: Number($("#oilLevelsNumber").value)
+    };
+    $("#oilPaintDialog").close();
+    await applyWorkerOperation("オイルペイント", "oilPaint", params);
+  });
+  $("#oilPaintDialog").addEventListener("close", hidePreview);
+  $("#oilPaintDialog").addEventListener("cancel", hidePreview);
+}
+
+function openSwirlDialog() {
+  $("#swirlRange").value = $("#swirlNumber").value = 180;
+  beginPreview(300_000);
+  scheduleWorkerPreview("swirl", { degrees: 180 }, 90);
+  $("#swirlDialog").showModal();
+}
+
+function setupSwirlDialog() {
+  const render = () => scheduleWorkerPreview("swirl", { degrees: Number($("#swirlNumber").value) }, 90);
+  bindRangeAndNumber("#swirlRange", "#swirlNumber", render);
+  $("#swirlOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const degrees = Number($("#swirlNumber").value);
+    $("#swirlDialog").close();
+    await applyWorkerOperation("渦巻き", "swirl", { degrees });
+  });
+  $("#swirlDialog").addEventListener("close", hidePreview);
+  $("#swirlDialog").addEventListener("cancel", hidePreview);
+}
+
+function openRadialWarpDialog(mode) {
+  $("#radialWarpDialog").dataset.mode = mode;
+  $("#radialWarpTitle").textContent = mode === "pinch" ? "つまむ" : "パンチ";
+  $("#radialWarpRange").value = $("#radialWarpNumber").value = 50;
+  beginPreview(300_000);
+  scheduleWorkerPreview("radialWarp", { strength: mode === "pinch" ? -50 : 50 }, 90);
+  $("#radialWarpDialog").showModal();
+}
+
+function setupRadialWarpDialog() {
+  const render = () => {
+    const mode = $("#radialWarpDialog").dataset.mode || "punch";
+    const value = Number($("#radialWarpNumber").value);
+    scheduleWorkerPreview("radialWarp", { strength: mode === "pinch" ? -value : value }, 90);
+  };
+  bindRangeAndNumber("#radialWarpRange", "#radialWarpNumber", render);
+  $("#radialWarpOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const mode = $("#radialWarpDialog").dataset.mode || "punch";
+    const value = Number($("#radialWarpNumber").value);
+    $("#radialWarpDialog").close();
+    await applyWorkerOperation(mode === "pinch" ? "つまむ" : "パンチ", "radialWarp", {
+      strength: mode === "pinch" ? -value : value
+    });
+  });
+  $("#radialWarpDialog").addEventListener("close", hidePreview);
+  $("#radialWarpDialog").addEventListener("cancel", hidePreview);
+}
+
+function activeRegionCenter() {
+  const b = state.selection || { x: 0, y: 0, width: canvas.width, height: canvas.height };
+  return {
+    x: b.x + b.width / 2,
+    y: b.y + b.height / 2,
+    radius: Math.max(10, Math.min(b.width, b.height) / 3)
+  };
+}
+
+function openSpotlightDialog() {
+  const c = activeRegionCenter();
+  $("#spotX").value = Math.round(c.x);
+  $("#spotY").value = Math.round(c.y);
+  $("#spotRadiusRange").value = $("#spotRadiusNumber").value = Math.round(c.radius);
+  $("#spotStrengthRange").value = $("#spotStrengthNumber").value = 60;
+  beginPreview(300_000);
+  scheduleWorkerPreview("spotlight", {
+    centerX: c.x * previewScale, centerY: c.y * previewScale,
+    radius: c.radius * previewScale, strength: 60
+  }, 70);
+  $("#spotlightDialog").showModal();
+}
+
+function setupSpotlightDialog() {
+  const render = () => scheduleWorkerPreview("spotlight", {
+    centerX: Number($("#spotX").value) * previewScale,
+    centerY: Number($("#spotY").value) * previewScale,
+    radius: Number($("#spotRadiusNumber").value) * previewScale,
+    strength: Number($("#spotStrengthNumber").value)
+  }, 70);
+  bindRangeAndNumber("#spotRadiusRange", "#spotRadiusNumber", render);
+  bindRangeAndNumber("#spotStrengthRange", "#spotStrengthNumber", render);
+  $("#spotX").addEventListener("input", render);
+  $("#spotY").addEventListener("input", render);
+  $("#spotlightOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      centerX: Number($("#spotX").value),
+      centerY: Number($("#spotY").value),
+      radius: Number($("#spotRadiusNumber").value),
+      strength: Number($("#spotStrengthNumber").value)
+    };
+    $("#spotlightDialog").close();
+    await applyWorkerOperation("スポットライト", "spotlight", params);
+  });
+  $("#spotlightDialog").addEventListener("close", hidePreview);
+  $("#spotlightDialog").addEventListener("cancel", hidePreview);
+}
+
+function openBlindsDialog() {
+  $("#blindsWidthRange").value = $("#blindsWidthNumber").value = 10;
+  $("#blindsOpacityRange").value = $("#blindsOpacityNumber").value = 30;
+  $("#blindsDirection").value = "horizontal";
+  beginPreview(360_000);
+  scheduleWorkerPreview("blinds", {
+    width: 10, color: $("#blindsColor").value, opacity: 30, direction: "horizontal"
+  }, 60);
+  $("#blindsDialog").showModal();
+}
+
+function setupBlindsDialog() {
+  const render = () => scheduleWorkerPreview("blinds", {
+    width: Math.max(2, Number($("#blindsWidthNumber").value) * previewScale),
+    color: $("#blindsColor").value,
+    opacity: Number($("#blindsOpacityNumber").value),
+    direction: $("#blindsDirection").value
+  }, 60);
+  bindRangeAndNumber("#blindsWidthRange", "#blindsWidthNumber", render);
+  bindRangeAndNumber("#blindsOpacityRange", "#blindsOpacityNumber", render);
+  $("#blindsColor").addEventListener("input", render);
+  $("#blindsDirection").addEventListener("change", render);
+  $("#blindsOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      width: Number($("#blindsWidthNumber").value),
+      color: $("#blindsColor").value,
+      opacity: Number($("#blindsOpacityNumber").value),
+      direction: $("#blindsDirection").value
+    };
+    $("#blindsDialog").close();
+    await applyWorkerOperation("ブラインド", "blinds", params);
+  });
+  $("#blindsDialog").addEventListener("close", hidePreview);
+  $("#blindsDialog").addEventListener("cancel", hidePreview);
+}
+
+function openSupernovaDialog() {
+  const c = activeRegionCenter();
+  $("#supernovaX").value = Math.round(c.x);
+  $("#supernovaY").value = Math.round(c.y);
+  $("#supernovaRadiusRange").value = $("#supernovaRadiusNumber").value = Math.round(c.radius);
+  $("#supernovaRaysRange").value = $("#supernovaRaysNumber").value = 24;
+  $("#supernovaRandomHue").checked = false;
+  beginPreview(300_000);
+  scheduleWorkerPreview("supernova", {
+    centerX: c.x * previewScale, centerY: c.y * previewScale,
+    radius: c.radius * previewScale, rays: 24,
+    color: $("#supernovaColor").value, randomHue: false
+  }, 80);
+  $("#supernovaDialog").showModal();
+}
+
+function setupSupernovaDialog() {
+  const render = () => scheduleWorkerPreview("supernova", {
+    centerX: Number($("#supernovaX").value) * previewScale,
+    centerY: Number($("#supernovaY").value) * previewScale,
+    radius: Number($("#supernovaRadiusNumber").value) * previewScale,
+    rays: Number($("#supernovaRaysNumber").value),
+    color: $("#supernovaColor").value,
+    randomHue: $("#supernovaRandomHue").checked
+  }, 80);
+  bindRangeAndNumber("#supernovaRadiusRange", "#supernovaRadiusNumber", render);
+  bindRangeAndNumber("#supernovaRaysRange", "#supernovaRaysNumber", render);
+  ["#supernovaX","#supernovaY","#supernovaColor"].forEach(id => $(id).addEventListener("input", render));
+  $("#supernovaRandomHue").addEventListener("change", render);
+  $("#supernovaOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      centerX: Number($("#supernovaX").value),
+      centerY: Number($("#supernovaY").value),
+      radius: Number($("#supernovaRadiusNumber").value),
+      rays: Number($("#supernovaRaysNumber").value),
+      color: $("#supernovaColor").value,
+      randomHue: $("#supernovaRandomHue").checked
+    };
+    $("#supernovaDialog").close();
+    await applyWorkerOperation("超新星", "supernova", params);
+  });
+  $("#supernovaDialog").addEventListener("close", hidePreview);
+  $("#supernovaDialog").addEventListener("cancel", hidePreview);
+}
+
+function openRippleDialog() {
+  $("#rippleAmplitudeRange").value = $("#rippleAmplitudeNumber").value = 8;
+  $("#rippleLengthRange").value = $("#rippleLengthNumber").value = 28;
+  beginPreview(300_000);
+  scheduleWorkerPreview("ripple", { amplitude: 8, wavelength: 28 }, 90);
+  $("#rippleDialog").showModal();
+}
+
+function setupRippleDialog() {
+  const render = () => scheduleWorkerPreview("ripple", {
+    amplitude: Number($("#rippleAmplitudeNumber").value) * previewScale,
+    wavelength: Math.max(2, Number($("#rippleLengthNumber").value) * previewScale)
+  }, 90);
+  bindRangeAndNumber("#rippleAmplitudeRange", "#rippleAmplitudeNumber", render);
+  bindRangeAndNumber("#rippleLengthRange", "#rippleLengthNumber", render);
+  $("#rippleOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      amplitude: Number($("#rippleAmplitudeNumber").value),
+      wavelength: Number($("#rippleLengthNumber").value)
+    };
+    $("#rippleDialog").close();
+    await applyWorkerOperation("波紋", "ripple", params);
+  });
+  $("#rippleDialog").addEventListener("close", hidePreview);
+  $("#rippleDialog").addEventListener("cancel", hidePreview);
+}
+
+function openNewspaperDialog() {
+  $("#newspaperRange").value = $("#newspaperNumber").value = 4;
+  beginPreview(360_000);
+  scheduleWorkerPreview("newspaper", { cellSize: Math.max(1, 4 * previewScale) }, 50);
+  $("#newspaperDialog").showModal();
+}
+
+function setupNewspaperDialog() {
+  const render = () => scheduleWorkerPreview("newspaper", {
+    cellSize: Math.max(1, Number($("#newspaperNumber").value) * previewScale)
+  }, 50);
+  bindRangeAndNumber("#newspaperRange", "#newspaperNumber", render);
+  $("#newspaperOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const cellSize = Number($("#newspaperNumber").value);
+    $("#newspaperDialog").close();
+    await applyWorkerOperation("新聞写真風", "newspaper", { cellSize });
+  });
+  $("#newspaperDialog").addEventListener("close", hidePreview);
+  $("#newspaperDialog").addEventListener("cancel", hidePreview);
+}
+
+function setCustomKernel(values, divisor = 1, offset = 0) {
+  [...document.querySelectorAll("#customKernel .kernel")].forEach((input, index) => {
+    input.value = values[index] ?? 0;
+  });
+  $("#customDivisor").value = divisor;
+  $("#customOffset").value = offset;
+}
+
+function currentCustomFilterParams() {
+  return {
+    kernel: [...document.querySelectorAll("#customKernel .kernel")].map(input => Number(input.value) || 0),
+    divisor: Number($("#customDivisor").value) || 1,
+    offset: Number($("#customOffset").value) || 0
+  };
+}
+
+function openCustomFilterDialog() {
+  setCustomKernel([0,-1,0,-1,5,-1,0,-1,0], 1, 0);
+  beginPreview(280_000);
+  scheduleWorkerPreview("customFilter", currentCustomFilterParams(), 80);
+  $("#customFilterDialog").showModal();
+}
+
+function setupCustomFilterDialog() {
+  const render = () => scheduleWorkerPreview("customFilter", currentCustomFilterParams(), 90);
+  [...document.querySelectorAll("#customKernel .kernel")].forEach(input => input.addEventListener("input", render));
+  $("#customDivisor").addEventListener("input", render);
+  $("#customOffset").addEventListener("input", render);
+  $("#customPresetSharpen").addEventListener("click", () => { setCustomKernel([0,-1,0,-1,5,-1,0,-1,0],1,0); render(); });
+  $("#customPresetEdge").addEventListener("click", () => { setCustomKernel([0,-1,0,-1,4,-1,0,-1,0],1,128); render(); });
+  $("#customPresetEmboss").addEventListener("click", () => { setCustomKernel([-2,-1,0,-1,1,1,0,1,2],1,128); render(); });
+  $("#customFilterOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = currentCustomFilterParams();
+    $("#customFilterDialog").close();
+    await applyWorkerOperation("カスタムフィルタ", "customFilter", params);
+  });
+  $("#customFilterDialog").addEventListener("close", hidePreview);
+  $("#customFilterDialog").addEventListener("cancel", hidePreview);
+}
+
 function setupSaveDialog() {
   $("#saveQuality").addEventListener("input", event => {
     $("#saveQualityOutput").value = event.target.value;
@@ -1440,6 +1900,18 @@ setupEdgeExtractDialog();
 setupNoiseDialog();
 setupDiffuseDialog();
 setupGlassDialog();
+setupWaveDialog();
+setupBlockDialog();
+setupFadeDialog();
+setupOilPaintDialog();
+setupSwirlDialog();
+setupRadialWarpDialog();
+setupSpotlightDialog();
+setupBlindsDialog();
+setupSupernovaDialog();
+setupRippleDialog();
+setupNewspaperDialog();
+setupCustomFilterDialog();
 setupTextDialog();
 setupNewDialog();
 setupSaveDialog();
