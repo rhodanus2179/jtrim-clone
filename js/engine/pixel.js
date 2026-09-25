@@ -541,6 +541,330 @@ function parseHexColor(value) {
   ];
 }
 
+
+function sampleBilinear(data, w, h, x, y, channel) {
+  x = Math.max(0, Math.min(w - 1, x));
+  y = Math.max(0, Math.min(h - 1, y));
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1);
+  const tx = x - x0, ty = y - y0;
+  const i00 = (y0 * w + x0) * 4 + channel;
+  const i10 = (y0 * w + x1) * 4 + channel;
+  const i01 = (y1 * w + x0) * 4 + channel;
+  const i11 = (y1 * w + x1) * 4 + channel;
+  const a = data[i00] * (1 - tx) + data[i10] * tx;
+  const b = data[i01] * (1 - tx) + data[i11] * tx;
+  return a * (1 - ty) + b * ty;
+}
+
+function distortImageData(source, selection, mapper) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width, h = source.height;
+  const bounds = regionBounds(source, selection);
+
+  for (let y = bounds.y0; y < bounds.y1; y++) {
+    for (let x = bounds.x0; x < bounds.x1; x++) {
+      const mapped = mapper(x, y, bounds);
+      const sx = mapped[0], sy = mapped[1];
+      const di = (y * w + x) * 4;
+      if (sx < bounds.x0 || sx >= bounds.x1 || sy < bounds.y0 || sy >= bounds.y1) {
+        continue;
+      }
+      dst[di] = clamp255(sampleBilinear(src, w, h, sx, sy, 0));
+      dst[di + 1] = clamp255(sampleBilinear(src, w, h, sx, sy, 1));
+      dst[di + 2] = clamp255(sampleBilinear(src, w, h, sx, sy, 2));
+      dst[di + 3] = clamp255(sampleBilinear(src, w, h, sx, sy, 3));
+    }
+  }
+  return out;
+}
+
+export function waveImageData(source, amplitude = 10, wavelength = 40, direction = "horizontal", selection = null) {
+  amplitude = Math.max(0, Math.min(200, Number(amplitude) || 0));
+  wavelength = Math.max(2, Math.min(1000, Number(wavelength) || 40));
+  return distortImageData(source, selection, (x, y) => {
+    let sx = x, sy = y;
+    if (direction === "horizontal" || direction === "both") {
+      sx = x + Math.sin((y / wavelength) * Math.PI * 2) * amplitude;
+    }
+    if (direction === "vertical" || direction === "both") {
+      sy = y + Math.sin((x / wavelength) * Math.PI * 2) * amplitude;
+    }
+    return [sx, sy];
+  });
+}
+
+export function blockImageData(source, size = 12, stagger = false, border = false, selection = null) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  size = Math.max(2, Math.min(200, Math.round(Number(size) || 12)));
+  const borderColor = [0, 0, 0];
+
+  let row = 0;
+  for (let by = y0; by < y1; by += size, row++) {
+    const rowOffset = stagger && row % 2 ? Math.floor(size / 2) : 0;
+    for (let bx = x0 - rowOffset; bx < x1; bx += size) {
+      const sx0 = Math.max(x0, bx);
+      const sy0 = by;
+      const ex = Math.min(x1, bx + size);
+      const ey = Math.min(y1, by + size);
+      if (sx0 >= ex || sy0 >= ey) continue;
+
+      let r = 0, g = 0, b = 0, a = 0, count = 0;
+      for (let y = sy0; y < ey; y++) {
+        for (let x = sx0; x < ex; x++) {
+          const i = (y * w + x) * 4;
+          r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]; count++;
+        }
+      }
+      r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count); a = Math.round(a / count);
+
+      for (let y = sy0; y < ey; y++) {
+        for (let x = sx0; x < ex; x++) {
+          const i = (y * w + x) * 4;
+          const isBorder = border && (x === sx0 || x === ex - 1 || y === sy0 || y === ey - 1);
+          dst[i] = isBorder ? borderColor[0] : r;
+          dst[i + 1] = isBorder ? borderColor[1] : g;
+          dst[i + 2] = isBorder ? borderColor[2] : b;
+          dst[i + 3] = a;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+export function fadeImageData(source, strength = 100, shape = "ellipse", color = "#ffffff", selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  const fill = parseHexColor(color);
+  const cx = (x0 + x1 - 1) / 2, cy = (y0 + y1 - 1) / 2;
+  const rx = Math.max(1, (x1 - x0) / 2), ry = Math.max(1, (y1 - y0) / 2);
+  const amount = Math.max(0, Math.min(1, Number(strength) / 100));
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      let dist;
+      if (shape === "rectangle") {
+        dist = Math.max(Math.abs((x - cx) / rx), Math.abs((y - cy) / ry));
+      } else {
+        dist = Math.sqrt(((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2);
+      }
+      const alpha = Math.max(0, Math.min(1, dist)) * amount;
+      const i = (y * source.width + x) * 4;
+      d[i] = clamp255(d[i] * (1 - alpha) + fill[0] * alpha);
+      d[i + 1] = clamp255(d[i + 1] * (1 - alpha) + fill[1] * alpha);
+      d[i + 2] = clamp255(d[i + 2] * (1 - alpha) + fill[2] * alpha);
+    }
+  }
+  return out;
+}
+
+export function oilPaintImageData(source, radius = 3, levels = 24, selection = null) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width, h = source.height;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  radius = Math.max(1, Math.min(5, Math.round(Number(radius) || 3)));
+  levels = Math.max(8, Math.min(64, Math.round(Number(levels) || 24)));
+
+  const counts = new Uint16Array(levels);
+  const rs = new Uint32Array(levels);
+  const gs = new Uint32Array(levels);
+  const bs = new Uint32Array(levels);
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      counts.fill(0); rs.fill(0); gs.fill(0); bs.fill(0);
+      let best = 0, bestCount = 0;
+      for (let yy = Math.max(y0, y - radius); yy <= Math.min(y1 - 1, y + radius); yy++) {
+        for (let xx = Math.max(x0, x - radius); xx <= Math.min(x1 - 1, x + radius); xx++) {
+          const i = (yy * w + xx) * 4;
+          const lum = (src[i] + src[i + 1] + src[i + 2]) / 3;
+          const bucket = Math.min(levels - 1, Math.floor(lum / 256 * levels));
+          const c = ++counts[bucket];
+          rs[bucket] += src[i]; gs[bucket] += src[i + 1]; bs[bucket] += src[i + 2];
+          if (c > bestCount) { bestCount = c; best = bucket; }
+        }
+      }
+      const di = (y * w + x) * 4;
+      dst[di] = Math.round(rs[best] / bestCount);
+      dst[di + 1] = Math.round(gs[best] / bestCount);
+      dst[di + 2] = Math.round(bs[best] / bestCount);
+    }
+  }
+  return out;
+}
+
+export function swirlImageData(source, degrees = 180, selection = null) {
+  const angle = Math.max(-540, Math.min(540, Number(degrees) || 0)) * Math.PI / 180;
+  return distortImageData(source, selection, (x, y, b) => {
+    const cx = (b.x0 + b.x1 - 1) / 2, cy = (b.y0 + b.y1 - 1) / 2;
+    const rx = Math.max(1, (b.x1 - b.x0) / 2), ry = Math.max(1, (b.y1 - b.y0) / 2);
+    const dx = (x - cx) / rx, dy = (y - cy) / ry;
+    const r = Math.sqrt(dx * dx + dy * dy);
+    if (r >= 1) return [x, y];
+    const theta = Math.atan2(dy, dx) - angle * (1 - r) * (1 - r);
+    return [cx + Math.cos(theta) * r * rx, cy + Math.sin(theta) * r * ry];
+  });
+}
+
+export function radialWarpImageData(source, strength = 50, selection = null) {
+  strength = Math.max(-100, Math.min(100, Number(strength) || 0)) / 100;
+  return distortImageData(source, selection, (x, y, b) => {
+    const cx = (b.x0 + b.x1 - 1) / 2, cy = (b.y0 + b.y1 - 1) / 2;
+    const rx = Math.max(1, (b.x1 - b.x0) / 2), ry = Math.max(1, (b.y1 - b.y0) / 2);
+    const dx = (x - cx) / rx, dy = (y - cy) / ry;
+    const r = Math.sqrt(dx * dx + dy * dy);
+    if (r <= 0 || r >= 1) return [x, y];
+    const power = strength >= 0 ? 1 + strength * 2 : 1 / (1 + (-strength) * 2);
+    const sr = Math.pow(r, power);
+    return [cx + dx / r * sr * rx, cy + dy / r * sr * ry];
+  });
+}
+
+export function spotlightImageData(source, centerX, centerY, radius = 120, strength = 60, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  const cx = Number.isFinite(Number(centerX)) ? Number(centerX) : (b.x0 + b.x1) / 2;
+  const cy = Number.isFinite(Number(centerY)) ? Number(centerY) : (b.y0 + b.y1) / 2;
+  radius = Math.max(1, Number(radius) || 120);
+  const amount = Math.max(-100, Math.min(100, Number(strength) || 0)) * 2.55;
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const dist = Math.hypot(x - cx, y - cy);
+      if (dist >= radius) continue;
+      const falloff = 1 - dist / radius;
+      const delta = amount * falloff * falloff;
+      const i = (y * source.width + x) * 4;
+      d[i] = clamp255(d[i] + delta);
+      d[i + 1] = clamp255(d[i + 1] + delta);
+      d[i + 2] = clamp255(d[i + 2] + delta);
+    }
+  }
+  return out;
+}
+
+export function blindsImageData(source, width = 10, color = "#000000", opacity = 30, direction = "horizontal", selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  const fill = parseHexColor(color);
+  width = Math.max(2, Math.min(200, Math.round(Number(width) || 10)));
+  const alpha = Math.max(0, Math.min(1, Number(opacity) / 100));
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const p = direction === "vertical" ? x - b.x0 : y - b.y0;
+      if (Math.floor(p / width) % 2 === 0) continue;
+      const i = (y * source.width + x) * 4;
+      d[i] = clamp255(d[i] * (1 - alpha) + fill[0] * alpha);
+      d[i + 1] = clamp255(d[i + 1] * (1 - alpha) + fill[1] * alpha);
+      d[i + 2] = clamp255(d[i + 2] * (1 - alpha) + fill[2] * alpha);
+    }
+  }
+  return out;
+}
+
+function hash01(n) {
+  const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+export function supernovaImageData(source, centerX, centerY, radius = 100, rays = 24, color = "#fff2a0", randomHue = false, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  const cx = Number.isFinite(Number(centerX)) ? Number(centerX) : (b.x0 + b.x1) / 2;
+  const cy = Number.isFinite(Number(centerY)) ? Number(centerY) : (b.y0 + b.y1) / 2;
+  radius = Math.max(5, Number(radius) || 100);
+  rays = Math.max(4, Math.min(200, Math.round(Number(rays) || 24)));
+  const base = parseHexColor(color);
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const dx = x - cx, dy = y - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > radius) continue;
+      const angle = (Math.atan2(dy, dx) + Math.PI) / (Math.PI * 2);
+      const rayPos = angle * rays;
+      const rayIndex = Math.floor(rayPos);
+      const rayDistance = Math.abs(rayPos - Math.round(rayPos));
+      const ray = Math.pow(Math.max(0, 1 - rayDistance * 7), 3);
+      const core = Math.pow(Math.max(0, 1 - dist / radius), 2);
+      const alpha = Math.min(1, core * 0.75 + ray * core * 0.8);
+      if (alpha <= 0) continue;
+      let fill = base;
+      if (randomHue) {
+        const hue = hash01(rayIndex + 1) * 360;
+        fill = hsvToRgb(hue, .65, 1);
+      }
+      const i = (y * source.width + x) * 4;
+      d[i] = clamp255(d[i] * (1 - alpha) + fill[0] * alpha);
+      d[i + 1] = clamp255(d[i + 1] * (1 - alpha) + fill[1] * alpha);
+      d[i + 2] = clamp255(d[i + 2] * (1 - alpha) + fill[2] * alpha);
+    }
+  }
+  return out;
+}
+
+export function rippleImageData(source, amplitude = 8, wavelength = 28, selection = null) {
+  amplitude = Math.max(0, Math.min(100, Number(amplitude) || 0));
+  wavelength = Math.max(2, Math.min(500, Number(wavelength) || 28));
+  return distortImageData(source, selection, (x, y, b) => {
+    const cx = (b.x0 + b.x1 - 1) / 2, cy = (b.y0 + b.y1 - 1) / 2;
+    const dx = x - cx, dy = y - cy;
+    const r = Math.hypot(dx, dy);
+    if (r === 0) return [x, y];
+    const displacement = Math.sin(r / wavelength * Math.PI * 2) * amplitude;
+    const sr = Math.max(0, r + displacement);
+    return [cx + dx / r * sr, cy + dy / r * sr];
+  });
+}
+
+export function newspaperImageData(source, cellSize = 4, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  const matrix = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5]
+  ];
+  cellSize = Math.max(1, Math.min(16, Math.round(Number(cellSize) || 4)));
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      const i = (y * source.width + x) * 4;
+      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const mx = Math.floor((x - b.x0) / cellSize) % 4;
+      const my = Math.floor((y - b.y0) / cellSize) % 4;
+      const threshold = (matrix[my][mx] + .5) / 16 * 255;
+      const v = gray >= threshold ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+  }
+  return out;
+}
+
+export function customFilterImageData(source, kernel, divisor = 1, offset = 0, selection = null) {
+  if (!Array.isArray(kernel) || kernel.length !== 9) {
+    throw new Error("Custom filter kernel must contain 9 values");
+  }
+  const k = kernel.map(v => Number(v) || 0);
+  divisor = Number(divisor);
+  if (!Number.isFinite(divisor) || divisor === 0) divisor = 1;
+  offset = Number(offset) || 0;
+  return convolve3x3(source, k, divisor, offset, selection, false);
+}
+
 function gaussianKernel(level) {
   const radius = Math.max(1, Math.round(level));
   const sigma = Math.max(.65, level * .72);
