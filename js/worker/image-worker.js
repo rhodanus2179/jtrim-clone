@@ -13,7 +13,10 @@ import {
   blindsImageData, supernovaImageData, rippleImageData,
   newspaperImageData, customFilterImageData,
   softenImageData, softLensImageData, motionBlurImageData,
-  bevelImageData, silkScreenImageData
+  bevelImageData, silkScreenImageData,
+  colorScaleImageData, rgbExchangeImageData, xorColorImageData,
+  gradientImageData, shadowHighlightImageData, transparentColorImageData,
+  usedColorCount, colorDepthImageData
 } from "../engine/pixel.js";
 
 self.onmessage = event => {
@@ -139,6 +142,32 @@ self.onmessage = event => {
       case "silkScreen":
         result = silkScreenImageData(source, params.cellSize, params.angle, params.selection);
         break;
+      case "colorScale":
+        result = colorScaleImageData(source, params.color, params.selection);
+        break;
+      case "rgbExchange":
+        result = rgbExchangeImageData(source, params.selection);
+        break;
+      case "xorColor":
+        result = xorColorImageData(source, params.selection);
+        break;
+      case "gradient":
+        result = gradientImageData(source, params.startColor, params.endColor, params.direction, params.opacity, params.selection);
+        break;
+      case "shadowHighlight":
+        result = shadowHighlightImageData(source, params.shadows, params.highlights, params.selection);
+        break;
+      case "transparentColor":
+        result = transparentColorImageData(source, params.color, params.tolerance);
+        break;
+      case "colorDepth":
+        result = colorDepthImageData(source, params.mode, params.dither);
+        break;
+      case "usedColorCount": {
+        const count = usedColorCount(source);
+        self.postMessage({ id, resultType: "scalar", payload: count });
+        return;
+      }
       case "histogram": {
         const histogram = histogramData(source, params.selection);
         self.postMessage({ id, resultType: "histogram", payload: histogram });
