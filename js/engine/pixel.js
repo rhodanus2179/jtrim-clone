@@ -1107,13 +1107,22 @@ export function transparentColorImageData(source, color = "#ffffff", tolerance =
 }
 
 export function usedColorCount(source) {
-  const set = new Set();
+  // 24-bit RGB has 16,777,216 possible values. One bit per color is only 2 MiB,
+  // and avoids a potentially enormous JS Set for photographs.
+  const bits = new Uint8Array(1 << 21);
   const d = source.data;
+  let count = 0;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
-    set.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+    const value = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+    const byte = value >> 3;
+    const mask = 1 << (value & 7);
+    if ((bits[byte] & mask) === 0) {
+      bits[byte] |= mask;
+      count++;
+    }
   }
-  return set.size;
+  return count;
 }
 
 function nearestPaletteValue(value, levels) {
