@@ -4,14 +4,15 @@ import { CommandRegistry } from "./commands.js";
 import { SelectionController } from "./selection.js";
 import { createBlankCanvas, decodeFileToCanvas, saveCanvas } from "./io/files.js";
 import {
-  resizeCanvas, cropCanvas, rotate90, flipCanvas,
-  grayscale, sepia, invert,
-  brightnessContrastImageData, gaussianBlurImageData, drawText
+  cropCanvas, rotate90, flipCanvas,
+  grayscale, sepia, invert, drawText
 } from "./engine/operations.js";
+import { ImageWorkerClient } from "./worker/client.js";
 
 const state = new AppState();
 const history = new HistoryManager(16);
 const commands = new CommandRegistry();
+const imageWorker = new ImageWorkerClient();
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#imageCanvas");
@@ -27,6 +28,8 @@ const fileInput = $("#fileInput");
 
 let previewSource = null;
 let previewSelection = null;
+let previewScale = 1;
+let previewGeneration = 0;
 
 const selection = new SelectionController({
   canvas,
@@ -124,18 +127,35 @@ function zoomStep(direction) {
 }
 
 function hidePreview() {
+  previewGeneration++;
   previewCanvas.hidden = true;
   previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
   previewSource = null;
   previewSelection = null;
+  previewScale = 1;
 }
 
-function beginPreview() {
-  previewCanvas.width = canvas.width;
-  previewCanvas.height = canvas.height;
-  previewSource = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
-  previewSelection = state.selection ? { ...state.selection } : null;
-  previewCtx.putImageData(previewSource, 0, 0);
+function beginPreview(maxPixels = 650_000) {
+  const pixels = canvas.width * canvas.height;
+  previewScale = Number.isFinite(maxPixels) && pixels > maxPixels
+    ? Math.sqrt(maxPixels / pixels)
+    : 1;
+
+  const width = Math.max(1, Math.round(canvas.width * previewScale));
+  const height = Math.max(1, Math.round(canvas.height * previewScale));
+  previewCanvas.width = width;
+  previewCanvas.height = height;
+  previewCtx.clearRect(0, 0, width, height);
+  previewCtx.imageSmoothingEnabled = true;
+  previewCtx.imageSmoothingQuality = "medium";
+  previewCtx.drawImage(canvas, 0, 0, width, height);
+  previewSource = previewCtx.getImageData(0, 0, width, height);
+  previewSelection = state.selection ? {
+    x: state.selection.x * previewScale,
+    y: state.selection.y * previewScale,
+    width: state.selection.width * previewScale,
+    height: state.selection.height * previewScale
+  } : null;
   previewCanvas.hidden = false;
 }
 
@@ -388,7 +408,18 @@ function setupResizeDialog() {
     const method = $("#resizeMethod").value;
     const resample = $("#resizeResample").checked;
     $("#resizeDialog").close();
-    await mutate("リサイズ", () => resizeCanvas(canvas, targetW, targetH, method, resample), { clearSelection: true });
+    await mutate("リサイズ", async () => {
+      const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = await imageWorker.run("resize", source, {
+        width: targetW,
+        height: targetH,
+        method,
+        resample
+      });
+      canvas.width = result.width;
+      canvas.height = result.height;
+      imageCtx.putImageData(result, 0, 0);
+    }, { clearSelection: true });
   });
 }
 
@@ -399,15 +430,24 @@ function openAdjustDialog() {
   $("#adjustDialog").showModal();
 }
 
+let adjustmentTimer = null;
 function renderAdjustmentPreview() {
-  if (!previewSource) return;
-  const result = brightnessContrastImageData(
-    previewSource,
-    Number($("#brightnessNumber").value),
-    Number($("#contrastNumber").value),
-    previewSelection
-  );
-  previewCtx.putImageData(result, 0, 0);
+  clearTimeout(adjustmentTimer);
+  const generation = ++previewGeneration;
+  adjustmentTimer = setTimeout(async () => {
+    if (!previewSource || generation !== previewGeneration) return;
+    try {
+      const result = await imageWorker.run("brightnessContrast", previewSource, {
+        brightness: Number($("#brightnessNumber").value),
+        contrast: Number($("#contrastNumber").value),
+        selection: previewSelection
+      });
+      if (generation !== previewGeneration) return;
+      previewCtx.putImageData(result, 0, 0);
+    } catch (error) {
+      console.error(error);
+    }
+  }, 45);
 }
 
 function bindRangeAndNumber(rangeSelector, numberSelector, onInput) {
@@ -431,9 +471,20 @@ function setupAdjustDialog() {
   bindRangeAndNumber("#contrastRange", "#contrastNumber", renderAdjustmentPreview);
   $("#adjustOk").addEventListener("click", async event => {
     event.preventDefault();
-    await commitPreview("明るさ／コントラスト");
+    clearTimeout(adjustmentTimer);
+    const brightness = Number($("#brightnessNumber").value);
+    const contrast = Number($("#contrastNumber").value);
+    hidePreview();
     $("#adjustDialog").close();
-    refreshUI();
+    await mutate("明るさ／コントラスト", async () => {
+      const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = await imageWorker.run("brightnessContrast", source, {
+        brightness,
+        contrast,
+        selection: state.selection
+      });
+      imageCtx.putImageData(result, 0, 0);
+    });
   });
   $("#adjustDialog").addEventListener("close", hidePreview);
   $("#adjustDialog").addEventListener("cancel", hidePreview);
@@ -441,7 +492,7 @@ function setupAdjustDialog() {
 
 function openBlurDialog() {
   $("#blurRange").value = $("#blurNumber").value = 3;
-  beginPreview();
+  beginPreview(360_000);
   renderBlurPreview();
   $("#blurDialog").showModal();
 }
@@ -449,13 +500,22 @@ function openBlurDialog() {
 let blurTimer = null;
 function renderBlurPreview() {
   clearTimeout(blurTimer);
-  blurTimer = setTimeout(() => {
-    if (!previewSource) return;
+  const generation = ++previewGeneration;
+  blurTimer = setTimeout(async () => {
+    if (!previewSource || generation !== previewGeneration) return;
     setMessage("ぼかしをプレビューしています…");
-    const result = gaussianBlurImageData(previewSource, Number($("#blurNumber").value), previewSelection);
-    previewCtx.putImageData(result, 0, 0);
-    setMessage("プレビュー");
-  }, 60);
+    try {
+      const result = await imageWorker.run("gaussianBlur", previewSource, {
+        level: Number($("#blurNumber").value),
+        selection: previewSelection
+      });
+      if (generation !== previewGeneration) return;
+      previewCtx.putImageData(result, 0, 0);
+      setMessage("プレビュー");
+    } catch (error) {
+      console.error(error);
+    }
+  }, 120);
 }
 
 function setupBlurDialog() {
@@ -463,13 +523,17 @@ function setupBlurDialog() {
   $("#blurOk").addEventListener("click", async event => {
     event.preventDefault();
     clearTimeout(blurTimer);
-    if (previewSource) {
-      const result = gaussianBlurImageData(previewSource, Number($("#blurNumber").value), previewSelection);
-      previewCtx.putImageData(result, 0, 0);
-    }
-    await commitPreview("ガウスぼかし");
+    const level = Number($("#blurNumber").value);
+    hidePreview();
     $("#blurDialog").close();
-    refreshUI();
+    await mutate("ガウスぼかし", async () => {
+      const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = await imageWorker.run("gaussianBlur", source, {
+        level,
+        selection: state.selection
+      });
+      imageCtx.putImageData(result, 0, 0);
+    });
   });
   $("#blurDialog").addEventListener("close", () => {
     clearTimeout(blurTimer);
@@ -494,8 +558,9 @@ function currentTextOptions() {
 }
 
 function renderTextPreview() {
-  if (!previewSource) return;
-  previewCtx.putImageData(previewSource, 0, 0);
+  if (previewCanvas.hidden) return;
+  previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  previewCtx.drawImage(canvas, 0, 0);
   drawText(previewCanvas, currentTextOptions());
 }
 
@@ -504,7 +569,11 @@ function openTextDialog() {
   $("#textX").value = Math.round(s?.x ?? 20);
   $("#textY").value = Math.round(s?.y ?? 20);
   $("#textValue").value = "";
-  beginPreview();
+  previewCanvas.width = canvas.width;
+  previewCanvas.height = canvas.height;
+  previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  previewCtx.drawImage(canvas, 0, 0);
+  previewCanvas.hidden = false;
   $("#textDialog").showModal();
   $("#textValue").focus();
 }
