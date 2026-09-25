@@ -205,6 +205,50 @@ export function gaussianBlurImageData(source, level = 3, selection = null) {
   return new ImageData(out, w, h);
 }
 
+
+export function rotateArbitrary(canvas, degrees, background = "#ffffff", expand = true) {
+  const temp = document.createElement("canvas");
+  temp.width = canvas.width;
+  temp.height = canvas.height;
+  temp.getContext("2d").drawImage(canvas, 0, 0);
+
+  const radians = Number(degrees) * Math.PI / 180;
+  const sin = Math.abs(Math.sin(radians));
+  const cos = Math.abs(Math.cos(radians));
+  const targetWidth = expand ? Math.ceil(temp.width * cos + temp.height * sin) : temp.width;
+  const targetHeight = expand ? Math.ceil(temp.width * sin + temp.height * cos) : temp.height;
+
+  canvas.width = Math.max(1, targetWidth);
+  canvas.height = Math.max(1, targetHeight);
+  const ctx = context(canvas);
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(radians);
+  ctx.drawImage(temp, -temp.width / 2, -temp.height / 2);
+  ctx.restore();
+}
+
+export function addMargin(canvas, { top = 0, right = 0, bottom = 0, left = 0, color = "#ffffff" } = {}) {
+  top = Math.max(0, Math.round(Number(top) || 0));
+  right = Math.max(0, Math.round(Number(right) || 0));
+  bottom = Math.max(0, Math.round(Number(bottom) || 0));
+  left = Math.max(0, Math.round(Number(left) || 0));
+
+  const temp = document.createElement("canvas");
+  temp.width = canvas.width;
+  temp.height = canvas.height;
+  temp.getContext("2d").drawImage(canvas, 0, 0);
+
+  canvas.width = temp.width + left + right;
+  canvas.height = temp.height + top + bottom;
+  const ctx = context(canvas);
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(temp, left, top);
+}
+
 export function drawText(canvas, options) {
   const ctx = context(canvas);
   const {
