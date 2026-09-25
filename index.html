@@ -94,11 +94,15 @@
         <div class="menu">
           <button class="menu-trigger">加工(T)</button>
           <div class="menu-popup">
+            <button data-command="filter.soften">ソフトにする(M)</button>
+            <button data-command="filter.softLens">ソフトレンズ(9)…</button>
             <button data-command="filter.sharpen">シャープにする(S)…</button>
             <button data-command="filter.emboss">エンボス(B)…</button>
             <button data-command="filter.edgeEnhance">エッジの強調(H)…</button>
             <button data-command="filter.edgeExtract">エッジを抽出(E)…</button>
             <button data-command="filter.gaussianBlur">ガウスぼかし(G)…</button>
+            <button data-command="filter.motionBlur">ぶれ(U)…</button>
+            <button data-command="filter.bevel">立体枠をつける(P)…</button>
             <button data-command="filter.diffuse">拡散(D)…</button>
             <button data-command="filter.noise">ノイズ付加(N)…</button>
             <button data-command="filter.mosaic">モザイク(I)…</button>
@@ -114,6 +118,7 @@
             <button data-command="filter.spotlight">スポットライト(U)…</button>
             <button data-command="filter.blinds">ブラインド(T)…</button>
             <button data-command="filter.supernova">超新星(A)…</button>
+            <button data-command="filter.silkScreen">シルクスクリーン(R)</button>
             <button data-command="filter.ripple">波紋(Q)…</button>
             <button data-command="filter.newspaper">新聞写真風(U)…</button>
             <hr>
@@ -569,6 +574,50 @@
     </form>
   </dialog>
 
+
+
+  <dialog id="softLensDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ソフトレンズ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>強さ (1～10)</span><input id="softLensRange" type="range" min="1" max="10" value="5"><input id="softLensNumber" type="number" min="1" max="10" value="5"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="softLensOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="motionBlurDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ぶれ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>距離</span><input id="motionDistanceRange" type="range" min="1" max="50" value="8"><input id="motionDistanceNumber" type="number" min="1" max="100" value="8"></label>
+        <label class="slider-row"><span>角度</span><input id="motionAngleRange" type="range" min="-180" max="180" value="0"><input id="motionAngleNumber" type="number" min="-360" max="360" value="0"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="motionBlurOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="bevelDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>立体枠をつける</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>枠幅</span><input id="bevelWidthRange" type="range" min="1" max="50" value="8"><input id="bevelWidthNumber" type="number" min="1" max="100" value="8"></label>
+        <label class="check-row"><input id="bevelInset" type="checkbox"> 凹ませる</label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="bevelOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="silkScreenDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>シルクスクリーン</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>網点サイズ</span><input id="silkCellRange" type="range" min="2" max="20" value="5"><input id="silkCellNumber" type="number" min="2" max="30" value="5"></label>
+        <label class="slider-row"><span>角度</span><input id="silkAngleRange" type="range" min="0" max="90" value="45"><input id="silkAngleNumber" type="number" min="0" max="180" value="45"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="silkScreenOk" value="default">OK</button></div>
+    </form>
+  </dialog>
 
   <dialog id="waveDialog" class="modal">
     <form method="dialog">
