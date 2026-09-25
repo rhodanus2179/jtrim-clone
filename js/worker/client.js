@@ -4,12 +4,16 @@ export class ImageWorkerClient {
     this.pending = new Map();
     this.worker = new Worker(new URL("./image-worker.js", import.meta.url), { type: "module" });
     this.worker.onmessage = event => {
-      const { id, error, width, height, buffer } = event.data;
+      const { id, error, width, height, buffer, resultType, payload } = event.data;
       const pending = this.pending.get(id);
       if (!pending) return;
       this.pending.delete(id);
       if (error) {
         pending.reject(new Error(error));
+        return;
+      }
+      if (resultType === "histogram") {
+        pending.resolve(payload);
         return;
       }
       pending.resolve(new ImageData(new Uint8ClampedArray(buffer), width, height));
