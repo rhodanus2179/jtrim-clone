@@ -5,6 +5,7 @@ import { SelectionController } from "./selection.js";
 import { createBlankCanvas, decodeFileToCanvas, saveCanvas } from "./io/files.js";
 import {
   cropCanvas, rotate90, rotateArbitrary, flipCanvas, addMargin,
+  copyRegion, clearRegion, pasteCanvas, compositeCanvas, joinCanvas,
   grayscale, sepia, invert, drawText
 } from "./engine/operations.js";
 import { ImageWorkerClient } from "./worker/client.js";
@@ -30,6 +31,10 @@ let previewSource = null;
 let previewSelection = null;
 let previewScale = 1;
 let previewGeneration = 0;
+let internalClipboard = null;
+let joinSourceCanvas = null;
+let compositeSourceCanvas = null;
+let histogramResult = null;
 
 const selection = new SelectionController({
   canvas,
@@ -43,6 +48,16 @@ const selection = new SelectionController({
 
 function setMessage(message) {
   $("#statusMessage").textContent = message;
+}
+
+async function fileToCanvas(file) {
+  const bitmap = await createImageBitmap(file);
+  const out = document.createElement("canvas");
+  out.width = bitmap.width;
+  out.height = bitmap.height;
+  out.getContext("2d").drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  return out;
 }
 
 function documentReady() {
@@ -256,6 +271,45 @@ function setupCommands() {
         setMessage("やり直しました");
       }
     })
+    .register("edit.copy", {
+      enabled: documentReady,
+      run: () => {
+        internalClipboard = copyRegion(canvas, state.selection);
+        setMessage(state.selection ? "選択範囲をコピーしました" : "画像全体をコピーしました");
+        refreshUI();
+      }
+    })
+    .register("edit.cut", {
+      enabled: documentReady,
+      run: async () => {
+        internalClipboard = copyRegion(canvas, state.selection);
+        await mutate("切り取り", () => clearRegion(canvas, state.selection, "#ffffff"));
+      }
+    })
+    .register("edit.paste", {
+      enabled: () => documentReady() && Boolean(internalClipboard),
+      run: async () => {
+        const x = Math.round(state.selection?.x ?? 0);
+        const y = Math.round(state.selection?.y ?? 0);
+        await mutate("貼り付け", () => pasteCanvas(canvas, internalClipboard, x, y, 1));
+      }
+    })
+    .register("edit.erase", {
+      enabled: () => documentReady() && Boolean(state.selection),
+      run: () => mutate("消去", () => clearRegion(canvas, state.selection, "#ffffff"))
+    })
+    .register("edit.fill", {
+      enabled: documentReady,
+      run: openFillDialog
+    })
+    .register("edit.join", {
+      enabled: documentReady,
+      run: openJoinDialog
+    })
+    .register("edit.composite", {
+      enabled: documentReady,
+      run: openCompositeDialog
+    })
     .register("edit.selectAll", {
       enabled: documentReady,
       run: () => selection.selectAllOrClear()
@@ -340,6 +394,18 @@ function setupCommands() {
       enabled: documentReady,
       run: openThresholdDialog
     })
+    .register("color.histogram", {
+      enabled: documentReady,
+      run: openHistogramDialog
+    })
+    .register("color.normalize", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("ノーマライズ", "normalize", {})
+    })
+    .register("color.equalize", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("イコライズ", "equalize", {})
+    })
     .register("filter.sharpen", {
       enabled: documentReady,
       run: openSharpenDialog
@@ -352,6 +418,10 @@ function setupCommands() {
       enabled: documentReady,
       run: openEdgeEnhanceDialog
     })
+    .register("filter.edgeExtract", {
+      enabled: documentReady,
+      run: openEdgeExtractDialog
+    })
     .register("filter.gaussianBlur", {
       enabled: documentReady,
       run: openBlurDialog
@@ -359,6 +429,22 @@ function setupCommands() {
     .register("filter.mosaic", {
       enabled: documentReady,
       run: openMosaicDialog
+    })
+    .register("filter.noise", {
+      enabled: documentReady,
+      run: openNoiseDialog
+    })
+    .register("filter.diffuse", {
+      enabled: documentReady,
+      run: openDiffuseDialog
+    })
+    .register("filter.glass", {
+      enabled: documentReady,
+      run: openGlassDialog
+    })
+    .register("filter.pencil", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("鉛筆画", "pencil", {})
     })
     .register("edit.text", {
       enabled: documentReady,
@@ -985,6 +1071,262 @@ function setupEdgeEnhanceDialog() {
   $("#edgeEnhanceDialog").addEventListener("cancel", hidePreview);
 }
 
+
+function openFillDialog() {
+  const s = state.selection;
+  $("#fillX").value = Math.round(s?.x ?? 0);
+  $("#fillY").value = Math.round(s?.y ?? 0);
+  $("#fillToleranceRange").value = $("#fillToleranceNumber").value = 20;
+  $("#fillOpacityRange").value = $("#fillOpacityNumber").value = 100;
+  $("#fillDialog").showModal();
+}
+
+function setupFillDialog() {
+  bindRangeAndNumber("#fillToleranceRange", "#fillToleranceNumber", () => {});
+  bindRangeAndNumber("#fillOpacityRange", "#fillOpacityNumber", () => {});
+  $("#fillOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const params = {
+      x: Number($("#fillX").value),
+      y: Number($("#fillY").value),
+      color: $("#fillColor").value,
+      tolerance: Number($("#fillToleranceNumber").value),
+      opacity: Number($("#fillOpacityNumber").value) / 100
+    };
+    $("#fillDialog").close();
+    await applyWorkerOperation("塗りつぶし", "floodFill", params);
+  });
+}
+
+function openJoinDialog() {
+  joinSourceCanvas = null;
+  $("#joinFileName").textContent = "未選択";
+  $("#joinSpacing").value = 0;
+  $("#joinOffset").value = 0;
+  $("#joinDialog").showModal();
+}
+
+function setupJoinDialog() {
+  $("#joinChooseFile").addEventListener("click", () => $("#joinFileInput").click());
+  $("#joinFileInput").addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      joinSourceCanvas = await fileToCanvas(file);
+      $("#joinFileName").textContent = `${file.name} (${joinSourceCanvas.width}×${joinSourceCanvas.height})`;
+    } catch (error) {
+      alert("画像を読み込めませんでした。");
+    } finally {
+      event.target.value = "";
+    }
+  });
+  $("#joinOk").addEventListener("click", async event => {
+    event.preventDefault();
+    if (!joinSourceCanvas) {
+      alert("連結する画像を選択してください。");
+      return;
+    }
+    const options = {
+      direction: $("#joinDirection").value,
+      spacing: Number($("#joinSpacing").value),
+      offset: Number($("#joinOffset").value),
+      color: $("#joinColor").value
+    };
+    $("#joinDialog").close();
+    await mutate("連結", () => joinCanvas(canvas, joinSourceCanvas, options), { clearSelection: true });
+  });
+}
+
+function openCompositeDialog() {
+  compositeSourceCanvas = internalClipboard;
+  $("#compositeSourceName").textContent = internalClipboard
+    ? `内部クリップボード (${internalClipboard.width}×${internalClipboard.height})`
+    : "未選択";
+  $("#compositeX").value = Math.round(state.selection?.x ?? 0);
+  $("#compositeY").value = Math.round(state.selection?.y ?? 0);
+  $("#compositeOpacityRange").value = $("#compositeOpacityNumber").value = 100;
+  $("#compositeDialog").showModal();
+}
+
+function setupCompositeDialog() {
+  bindRangeAndNumber("#compositeOpacityRange", "#compositeOpacityNumber", () => {});
+  $("#compositeUseClipboard").addEventListener("click", () => {
+    if (!internalClipboard) {
+      alert("内部クリップボードは空です。先にコピーしてください。");
+      return;
+    }
+    compositeSourceCanvas = internalClipboard;
+    $("#compositeSourceName").textContent = `内部クリップボード (${internalClipboard.width}×${internalClipboard.height})`;
+  });
+  $("#compositeChooseFile").addEventListener("click", () => $("#compositeFileInput").click());
+  $("#compositeFileInput").addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      compositeSourceCanvas = await fileToCanvas(file);
+      $("#compositeSourceName").textContent = `${file.name} (${compositeSourceCanvas.width}×${compositeSourceCanvas.height})`;
+    } catch (error) {
+      alert("画像を読み込めませんでした。");
+    } finally {
+      event.target.value = "";
+    }
+  });
+  $("#compositeOk").addEventListener("click", async event => {
+    event.preventDefault();
+    if (!compositeSourceCanvas) {
+      alert("合成する画像を選択してください。");
+      return;
+    }
+    const options = {
+      x: Number($("#compositeX").value),
+      y: Number($("#compositeY").value),
+      opacity: Number($("#compositeOpacityNumber").value) / 100,
+      mode: $("#compositeMode").value
+    };
+    $("#compositeDialog").close();
+    await mutate("合成", () => compositeCanvas(canvas, compositeSourceCanvas, options));
+  });
+}
+
+function drawHistogram() {
+  if (!histogramResult) return;
+  const channel = $("#histogramChannel").value;
+  const values = histogramResult[channel];
+  const graph = $("#histogramCanvas");
+  const ctx = graph.getContext("2d");
+  const w = graph.width, h = graph.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#d5dbe3";
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const y = Math.round(h * i / 4) + .5;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+  const max = Math.max(1, ...values);
+  ctx.fillStyle = channel === "red" ? "#d33" : channel === "green" ? "#27964b" : channel === "blue" ? "#2878d8" : "#555";
+  const barW = w / 256;
+  for (let i = 0; i < 256; i++) {
+    const bh = values[i] / max * (h - 10);
+    ctx.fillRect(i * barW, h - bh, Math.max(1, barW), bh);
+  }
+  $("#histogramStats").textContent = `対象画素数: ${histogramResult.pixels.toLocaleString()} / 最大頻度: ${max.toLocaleString()}`;
+}
+
+async function openHistogramDialog() {
+  try {
+    setMessage("ヒストグラムを計算しています…");
+    const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+    histogramResult = await imageWorker.run("histogram", source, { selection: state.selection });
+    $("#histogramChannel").value = "luma";
+    $("#histogramDialog").showModal();
+    drawHistogram();
+    setMessage("ヒストグラム");
+  } catch (error) {
+    console.error(error);
+    alert("ヒストグラムを計算できませんでした。");
+  }
+}
+
+function setupHistogramDialog() {
+  $("#histogramChannel").addEventListener("change", drawHistogram);
+}
+
+function openEdgeExtractDialog() {
+  $("#edgeExtractRange").value = $("#edgeExtractNumber").value = 3;
+  beginPreview(360_000);
+  scheduleWorkerPreview("edgeExtract", { level: 3 }, 90);
+  $("#edgeExtractDialog").showModal();
+}
+
+function setupEdgeExtractDialog() {
+  const render = () => scheduleWorkerPreview("edgeExtract", { level: Number($("#edgeExtractNumber").value) }, 90);
+  bindRangeAndNumber("#edgeExtractRange", "#edgeExtractNumber", render);
+  $("#edgeExtractOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const level = Number($("#edgeExtractNumber").value);
+    $("#edgeExtractDialog").close();
+    await applyWorkerOperation("エッジを抽出", "edgeExtract", { level });
+  });
+  $("#edgeExtractDialog").addEventListener("close", hidePreview);
+  $("#edgeExtractDialog").addEventListener("cancel", hidePreview);
+}
+
+function openNoiseDialog() {
+  $("#noiseRange").value = $("#noiseNumber").value = 15;
+  $("#noiseColor").checked = false;
+  beginPreview(360_000);
+  scheduleWorkerPreview("noise", { amount: 15, color: false }, 100);
+  $("#noiseDialog").showModal();
+}
+
+function setupNoiseDialog() {
+  const render = () => scheduleWorkerPreview("noise", {
+    amount: Number($("#noiseNumber").value),
+    color: $("#noiseColor").checked
+  }, 110);
+  bindRangeAndNumber("#noiseRange", "#noiseNumber", render);
+  $("#noiseColor").addEventListener("change", render);
+  $("#noiseOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = { amount: Number($("#noiseNumber").value), color: $("#noiseColor").checked };
+    $("#noiseDialog").close();
+    await applyWorkerOperation("ノイズ付加", "noise", params);
+  });
+  $("#noiseDialog").addEventListener("close", hidePreview);
+  $("#noiseDialog").addEventListener("cancel", hidePreview);
+}
+
+function openDiffuseDialog() {
+  $("#diffuseRange").value = $("#diffuseNumber").value = 4;
+  beginPreview(360_000);
+  scheduleWorkerPreview("diffuse", { radius: 4 }, 100);
+  $("#diffuseDialog").showModal();
+}
+
+function setupDiffuseDialog() {
+  const render = () => scheduleWorkerPreview("diffuse", { radius: Number($("#diffuseNumber").value) }, 110);
+  bindRangeAndNumber("#diffuseRange", "#diffuseNumber", render);
+  $("#diffuseOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const radius = Number($("#diffuseNumber").value);
+    $("#diffuseDialog").close();
+    await applyWorkerOperation("拡散", "diffuse", { radius });
+  });
+  $("#diffuseDialog").addEventListener("close", hidePreview);
+  $("#diffuseDialog").addEventListener("cancel", hidePreview);
+}
+
+function openGlassDialog() {
+  $("#glassRange").value = $("#glassNumber").value = 6;
+  $("#glassDirection").value = "both";
+  beginPreview(360_000);
+  scheduleWorkerPreview("glass", { size: 6, direction: "both" }, 80);
+  $("#glassDialog").showModal();
+}
+
+function setupGlassDialog() {
+  const render = () => scheduleWorkerPreview("glass", {
+    size: Number($("#glassNumber").value),
+    direction: $("#glassDirection").value
+  }, 80);
+  bindRangeAndNumber("#glassRange", "#glassNumber", render);
+  $("#glassDirection").addEventListener("change", render);
+  $("#glassOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = { size: Number($("#glassNumber").value), direction: $("#glassDirection").value };
+    $("#glassDialog").close();
+    await applyWorkerOperation("ガラス処理", "glass", params);
+  });
+  $("#glassDialog").addEventListener("close", hidePreview);
+  $("#glassDialog").addEventListener("cancel", hidePreview);
+}
+
 function setupSaveDialog() {
   $("#saveQuality").addEventListener("input", event => {
     $("#saveQualityOutput").value = event.target.value;
@@ -1043,6 +1385,10 @@ function setupKeyboard() {
     else if (ctrl && key === "o") command = "file.open";
     else if (ctrl && key === "z") command = "edit.undo";
     else if (ctrl && key === "y") command = "edit.redo";
+    else if (ctrl && key === "c") command = "edit.copy";
+    else if (ctrl && key === "v") command = "edit.paste";
+    else if (ctrl && key === "x") command = "edit.cut";
+    else if (!ctrl && event.key === "Delete") command = "edit.erase";
     else if (ctrl && key === "a") command = "edit.selectAll";
     else if (ctrl && key === "r") command = "image.resize";
     else if (ctrl && key === "t") command = "image.crop";
@@ -1086,6 +1432,14 @@ setupSolarizeDialog();
 setupThresholdDialog();
 setupEmbossDialog();
 setupEdgeEnhanceDialog();
+setupFillDialog();
+setupJoinDialog();
+setupCompositeDialog();
+setupHistogramDialog();
+setupEdgeExtractDialog();
+setupNoiseDialog();
+setupDiffuseDialog();
+setupGlassDialog();
 setupTextDialog();
 setupNewDialog();
 setupSaveDialog();
