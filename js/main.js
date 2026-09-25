@@ -4,7 +4,7 @@ import { CommandRegistry } from "./commands.js";
 import { SelectionController } from "./selection.js";
 import { createBlankCanvas, decodeFileToCanvas, saveCanvas } from "./io/files.js";
 import {
-  cropCanvas, rotate90, flipCanvas,
+  cropCanvas, rotate90, rotateArbitrary, flipCanvas, addMargin,
   grayscale, sepia, invert, drawText
 } from "./engine/operations.js";
 import { ImageWorkerClient } from "./worker/client.js";
@@ -284,6 +284,10 @@ function setupCommands() {
       enabled: documentReady,
       run: () => mutate("右へ90度回転", () => rotate90(canvas, "right"), { clearSelection: true })
     })
+    .register("image.rotateArbitrary", {
+      enabled: documentReady,
+      run: () => $("#rotateDialog").showModal()
+    })
     .register("image.flipH", {
       enabled: documentReady,
       run: () => mutate("ミラー", () => flipCanvas(canvas, "horizontal"))
@@ -291,6 +295,10 @@ function setupCommands() {
     .register("image.flipV", {
       enabled: documentReady,
       run: () => mutate("フリップ", () => flipCanvas(canvas, "vertical"))
+    })
+    .register("image.margin", {
+      enabled: documentReady,
+      run: () => $("#marginDialog").showModal()
     })
     .register("color.grayscale", {
       enabled: documentReady,
@@ -308,9 +316,29 @@ function setupCommands() {
       enabled: documentReady,
       run: openAdjustDialog
     })
+    .register("color.rgb", {
+      enabled: documentReady,
+      run: openRgbDialog
+    })
+    .register("color.gamma", {
+      enabled: documentReady,
+      run: openGammaDialog
+    })
+    .register("color.hsv", {
+      enabled: documentReady,
+      run: openHsvDialog
+    })
+    .register("filter.sharpen", {
+      enabled: documentReady,
+      run: openSharpenDialog
+    })
     .register("filter.gaussianBlur", {
       enabled: documentReady,
       run: openBlurDialog
+    })
+    .register("filter.mosaic", {
+      enabled: documentReady,
+      run: openMosaicDialog
     })
     .register("edit.text", {
       enabled: documentReady,
@@ -622,6 +650,210 @@ function setupNewDialog() {
   });
 }
 
+
+let genericPreviewTimer = null;
+
+function scheduleWorkerPreview(operation, params, delay = 70) {
+  clearTimeout(genericPreviewTimer);
+  const generation = ++previewGeneration;
+  genericPreviewTimer = setTimeout(async () => {
+    if (!previewSource || generation !== previewGeneration) return;
+    try {
+      const result = await imageWorker.run(operation, previewSource, {
+        ...params,
+        selection: previewSelection
+      });
+      if (generation !== previewGeneration) return;
+      previewCtx.putImageData(result, 0, 0);
+      setMessage("プレビュー");
+    } catch (error) {
+      console.error(error);
+    }
+  }, delay);
+}
+
+async function applyWorkerOperation(label, operation, params, { clearSelection = false } = {}) {
+  hidePreview();
+  await mutate(label, async () => {
+    const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = await imageWorker.run(operation, source, {
+      ...params,
+      selection: state.selection
+    });
+    imageCtx.putImageData(result, 0, 0);
+  }, { clearSelection });
+}
+
+function setupRotateDialog() {
+  bindRangeAndNumber("#rotateRange", "#rotateNumber", () => {});
+  $("#rotateOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const degrees = Number($("#rotateNumber").value);
+    const background = $("#rotateBackground").value;
+    const expand = $("#rotateExpand").checked;
+    $("#rotateDialog").close();
+    await mutate("任意角度回転", () => rotateArbitrary(canvas, degrees, background, expand), { clearSelection: true });
+  });
+}
+
+function setupMarginDialog() {
+  $("#marginSame").addEventListener("click", () => {
+    const value = Math.max(0, Number($("#marginTop").value) || 0);
+    $("#marginRight").value = $("#marginBottom").value = $("#marginLeft").value = value;
+  });
+  $("#marginOk").addEventListener("click", async event => {
+    event.preventDefault();
+    const options = {
+      top: Number($("#marginTop").value),
+      right: Number($("#marginRight").value),
+      bottom: Number($("#marginBottom").value),
+      left: Number($("#marginLeft").value),
+      color: $("#marginColor").value
+    };
+    $("#marginDialog").close();
+    await mutate("余白作成", () => addMargin(canvas, options), { clearSelection: true });
+  });
+}
+
+function openGammaDialog() {
+  $("#gammaRange").value = 100;
+  $("#gammaNumber").value = "1.00";
+  beginPreview();
+  $("#gammaDialog").showModal();
+}
+
+function setupGammaDialog() {
+  const range = $("#gammaRange");
+  const number = $("#gammaNumber");
+  const render = () => scheduleWorkerPreview("gamma", { gamma: Number(number.value) }, 55);
+  range.addEventListener("input", () => {
+    number.value = (Number(range.value) / 100).toFixed(2);
+    render();
+  });
+  number.addEventListener("input", () => {
+    const value = Math.max(.2, Math.min(5, Number(number.value) || 1));
+    range.value = Math.round(value * 100);
+    render();
+  });
+  $("#gammaOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const gamma = Number(number.value);
+    $("#gammaDialog").close();
+    await applyWorkerOperation("ガンマ補正", "gamma", { gamma });
+  });
+  $("#gammaDialog").addEventListener("close", hidePreview);
+  $("#gammaDialog").addEventListener("cancel", hidePreview);
+}
+
+function openRgbDialog() {
+  for (const channel of ["R", "G", "B"]) {
+    $("#rgb" + channel + "Range").value = 0;
+    $("#rgb" + channel + "Number").value = 0;
+  }
+  beginPreview();
+  $("#rgbDialog").showModal();
+}
+
+function setupRgbDialog() {
+  const render = () => scheduleWorkerPreview("rgbAdjust", {
+    red: Number($("#rgbRNumber").value),
+    green: Number($("#rgbGNumber").value),
+    blue: Number($("#rgbBNumber").value)
+  });
+  bindRangeAndNumber("#rgbRRange", "#rgbRNumber", render);
+  bindRangeAndNumber("#rgbGRange", "#rgbGNumber", render);
+  bindRangeAndNumber("#rgbBRange", "#rgbBNumber", render);
+  $("#rgbOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      red: Number($("#rgbRNumber").value),
+      green: Number($("#rgbGNumber").value),
+      blue: Number($("#rgbBNumber").value)
+    };
+    $("#rgbDialog").close();
+    await applyWorkerOperation("RGBの度合い", "rgbAdjust", params);
+  });
+  $("#rgbDialog").addEventListener("close", hidePreview);
+  $("#rgbDialog").addEventListener("cancel", hidePreview);
+}
+
+function openHsvDialog() {
+  for (const channel of ["H", "S", "V"]) {
+    $("#hsv" + channel + "Range").value = 0;
+    $("#hsv" + channel + "Number").value = 0;
+  }
+  beginPreview();
+  $("#hsvDialog").showModal();
+}
+
+function setupHsvDialog() {
+  const render = () => scheduleWorkerPreview("hsvAdjust", {
+    hue: Number($("#hsvHNumber").value),
+    saturation: Number($("#hsvSNumber").value),
+    value: Number($("#hsvVNumber").value)
+  }, 80);
+  bindRangeAndNumber("#hsvHRange", "#hsvHNumber", render);
+  bindRangeAndNumber("#hsvSRange", "#hsvSNumber", render);
+  bindRangeAndNumber("#hsvVRange", "#hsvVNumber", render);
+  $("#hsvOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      hue: Number($("#hsvHNumber").value),
+      saturation: Number($("#hsvSNumber").value),
+      value: Number($("#hsvVNumber").value)
+    };
+    $("#hsvDialog").close();
+    await applyWorkerOperation("HSVカラー調整", "hsvAdjust", params);
+  });
+  $("#hsvDialog").addEventListener("close", hidePreview);
+  $("#hsvDialog").addEventListener("cancel", hidePreview);
+}
+
+function openSharpenDialog() {
+  $("#sharpenRange").value = $("#sharpenNumber").value = 3;
+  beginPreview(420_000);
+  scheduleWorkerPreview("sharpen", { level: 3 }, 90);
+  $("#sharpenDialog").showModal();
+}
+
+function setupSharpenDialog() {
+  const render = () => scheduleWorkerPreview("sharpen", { level: Number($("#sharpenNumber").value) }, 90);
+  bindRangeAndNumber("#sharpenRange", "#sharpenNumber", render);
+  $("#sharpenOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const level = Number($("#sharpenNumber").value);
+    $("#sharpenDialog").close();
+    await applyWorkerOperation("シャープにする", "sharpen", { level });
+  });
+  $("#sharpenDialog").addEventListener("close", hidePreview);
+  $("#sharpenDialog").addEventListener("cancel", hidePreview);
+}
+
+function openMosaicDialog() {
+  $("#mosaicRange").value = $("#mosaicNumber").value = 10;
+  beginPreview(500_000);
+  scheduleWorkerPreview("mosaic", { blockSize: 10 }, 50);
+  $("#mosaicDialog").showModal();
+}
+
+function setupMosaicDialog() {
+  const render = () => scheduleWorkerPreview("mosaic", { blockSize: Number($("#mosaicNumber").value) }, 50);
+  bindRangeAndNumber("#mosaicRange", "#mosaicNumber", render);
+  $("#mosaicOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const blockSize = Number($("#mosaicNumber").value);
+    $("#mosaicDialog").close();
+    await applyWorkerOperation("モザイク", "mosaic", { blockSize });
+  });
+  $("#mosaicDialog").addEventListener("close", hidePreview);
+  $("#mosaicDialog").addEventListener("cancel", hidePreview);
+}
+
 function setupSaveDialog() {
   $("#saveQuality").addEventListener("input", event => {
     $("#saveQualityOutput").value = event.target.value;
@@ -711,6 +943,13 @@ setupMenus();
 setupResizeDialog();
 setupAdjustDialog();
 setupBlurDialog();
+setupRotateDialog();
+setupMarginDialog();
+setupGammaDialog();
+setupRgbDialog();
+setupHsvDialog();
+setupSharpenDialog();
+setupMosaicDialog();
 setupTextDialog();
 setupNewDialog();
 setupSaveDialog();
