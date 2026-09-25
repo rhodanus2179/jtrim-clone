@@ -376,6 +376,22 @@ function setupCommands() {
       enabled: documentReady,
       run: () => $("#shadowDialog").showModal()
     })
+    .register("image.denoise", {
+      enabled: documentReady,
+      run: openDenoiseDialog
+    })
+    .register("image.densityMin", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("最小濃度抽出", "densityExtract", { mode: "min" })
+    })
+    .register("image.densityMedian", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("中間濃度抽出", "densityExtract", { mode: "median" })
+    })
+    .register("image.densityMax", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("最大濃度抽出", "densityExtract", { mode: "max" })
+    })
     .register("image.transparentColor", {
       enabled: documentReady,
       run: openTransparentColorDialog
@@ -447,6 +463,10 @@ function setupCommands() {
     .register("color.shadowHighlight", {
       enabled: documentReady,
       run: openShadowHighlightDialog
+    })
+    .register("color.redEye", {
+      enabled: documentReady,
+      run: openRedEyeDialog
     })
     .register("color.histogram", {
       enabled: documentReady,
@@ -1569,6 +1589,49 @@ function setupTransparentColorDialog() {
   });
 }
 
+
+function openDenoiseDialog() {
+  $("#denoiseRange").value = $("#denoiseNumber").value = 1;
+  beginPreview(180_000);
+  scheduleWorkerPreview("denoise", { level: 1 }, 160);
+  $("#denoiseDialog").showModal();
+}
+
+function setupDenoiseDialog() {
+  const render = () => scheduleWorkerPreview("denoise", { level: Number($("#denoiseNumber").value) }, 180);
+  bindRangeAndNumber("#denoiseRange", "#denoiseNumber", render);
+  $("#denoiseOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const level = Number($("#denoiseNumber").value);
+    $("#denoiseDialog").close();
+    await applyWorkerOperation("ノイズ除去", "denoise", { level });
+  });
+  $("#denoiseDialog").addEventListener("close", hidePreview);
+  $("#denoiseDialog").addEventListener("cancel", hidePreview);
+}
+
+function openRedEyeDialog() {
+  $("#redEyeRange").value = $("#redEyeNumber").value = 80;
+  beginPreview(400_000);
+  scheduleWorkerPreview("redEye", { strength: 80 }, 70);
+  $("#redEyeDialog").showModal();
+}
+
+function setupRedEyeDialog() {
+  const render = () => scheduleWorkerPreview("redEye", { strength: Number($("#redEyeNumber").value) }, 70);
+  bindRangeAndNumber("#redEyeRange", "#redEyeNumber", render);
+  $("#redEyeOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const strength = Number($("#redEyeNumber").value);
+    $("#redEyeDialog").close();
+    await applyWorkerOperation("赤目補正", "redEye", { strength });
+  });
+  $("#redEyeDialog").addEventListener("close", hidePreview);
+  $("#redEyeDialog").addEventListener("cancel", hidePreview);
+}
+
 function openColorScaleDialog() {
   beginPreview(500_000);
   scheduleWorkerPreview("colorScale", { color: $("#colorScaleColor").value }, 50);
@@ -2289,7 +2352,9 @@ setupShapeCropDialog();
 setupCoordinateCropDialog();
 setupShiftDialog();
 setupShadowDialog();
+setupDenoiseDialog();
 setupTransparentColorDialog();
+setupRedEyeDialog();
 setupColorScaleDialog();
 setupGradientDialog();
 setupShadowHighlightDialog();
