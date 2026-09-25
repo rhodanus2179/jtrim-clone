@@ -406,6 +406,14 @@ function setupCommands() {
       enabled: documentReady,
       run: () => applyWorkerOperation("イコライズ", "equalize", {})
     })
+    .register("filter.soften", {
+      enabled: documentReady,
+      run: () => applyWorkerOperation("ソフトにする", "soften", {})
+    })
+    .register("filter.softLens", {
+      enabled: documentReady,
+      run: openSoftLensDialog
+    })
     .register("filter.sharpen", {
       enabled: documentReady,
       run: openSharpenDialog
@@ -425,6 +433,14 @@ function setupCommands() {
     .register("filter.gaussianBlur", {
       enabled: documentReady,
       run: openBlurDialog
+    })
+    .register("filter.motionBlur", {
+      enabled: documentReady,
+      run: openMotionBlurDialog
+    })
+    .register("filter.bevel", {
+      enabled: documentReady,
+      run: openBevelDialog
     })
     .register("filter.mosaic", {
       enabled: documentReady,
@@ -485,6 +501,10 @@ function setupCommands() {
     .register("filter.supernova", {
       enabled: documentReady,
       run: openSupernovaDialog
+    })
+    .register("filter.silkScreen", {
+      enabled: documentReady,
+      run: openSilkScreenDialog
     })
     .register("filter.ripple", {
       enabled: documentReady,
@@ -1380,6 +1400,109 @@ function setupGlassDialog() {
 }
 
 
+
+function openSoftLensDialog() {
+  $("#softLensRange").value = $("#softLensNumber").value = 5;
+  beginPreview(260_000);
+  scheduleWorkerPreview("softLens", { strength: 5 }, 100);
+  $("#softLensDialog").showModal();
+}
+
+function setupSoftLensDialog() {
+  const render = () => scheduleWorkerPreview("softLens", { strength: Number($("#softLensNumber").value) }, 100);
+  bindRangeAndNumber("#softLensRange", "#softLensNumber", render);
+  $("#softLensOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const strength = Number($("#softLensNumber").value);
+    $("#softLensDialog").close();
+    await applyWorkerOperation("ソフトレンズ", "softLens", { strength });
+  });
+  $("#softLensDialog").addEventListener("close", hidePreview);
+  $("#softLensDialog").addEventListener("cancel", hidePreview);
+}
+
+function openMotionBlurDialog() {
+  $("#motionDistanceRange").value = $("#motionDistanceNumber").value = 8;
+  $("#motionAngleRange").value = $("#motionAngleNumber").value = 0;
+  beginPreview(220_000);
+  scheduleWorkerPreview("motionBlur", { distance: 8 * previewScale, angle: 0 }, 120);
+  $("#motionBlurDialog").showModal();
+}
+
+function setupMotionBlurDialog() {
+  const render = () => scheduleWorkerPreview("motionBlur", {
+    distance: Math.max(1, Number($("#motionDistanceNumber").value) * previewScale),
+    angle: Number($("#motionAngleNumber").value)
+  }, 120);
+  bindRangeAndNumber("#motionDistanceRange", "#motionDistanceNumber", render);
+  bindRangeAndNumber("#motionAngleRange", "#motionAngleNumber", render);
+  $("#motionBlurOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = {
+      distance: Number($("#motionDistanceNumber").value),
+      angle: Number($("#motionAngleNumber").value)
+    };
+    $("#motionBlurDialog").close();
+    await applyWorkerOperation("ぶれ", "motionBlur", params);
+  });
+  $("#motionBlurDialog").addEventListener("close", hidePreview);
+  $("#motionBlurDialog").addEventListener("cancel", hidePreview);
+}
+
+function openBevelDialog() {
+  $("#bevelWidthRange").value = $("#bevelWidthNumber").value = 8;
+  $("#bevelInset").checked = false;
+  beginPreview(360_000);
+  scheduleWorkerPreview("bevel", { width: Math.max(1, 8 * previewScale), inset: false }, 60);
+  $("#bevelDialog").showModal();
+}
+
+function setupBevelDialog() {
+  const render = () => scheduleWorkerPreview("bevel", {
+    width: Math.max(1, Number($("#bevelWidthNumber").value) * previewScale),
+    inset: $("#bevelInset").checked
+  }, 60);
+  bindRangeAndNumber("#bevelWidthRange", "#bevelWidthNumber", render);
+  $("#bevelInset").addEventListener("change", render);
+  $("#bevelOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = { width: Number($("#bevelWidthNumber").value), inset: $("#bevelInset").checked };
+    $("#bevelDialog").close();
+    await applyWorkerOperation("立体枠をつける", "bevel", params);
+  });
+  $("#bevelDialog").addEventListener("close", hidePreview);
+  $("#bevelDialog").addEventListener("cancel", hidePreview);
+}
+
+function openSilkScreenDialog() {
+  $("#silkCellRange").value = $("#silkCellNumber").value = 5;
+  $("#silkAngleRange").value = $("#silkAngleNumber").value = 45;
+  beginPreview(360_000);
+  scheduleWorkerPreview("silkScreen", { cellSize: Math.max(2, 5 * previewScale), angle: 45 }, 60);
+  $("#silkScreenDialog").showModal();
+}
+
+function setupSilkScreenDialog() {
+  const render = () => scheduleWorkerPreview("silkScreen", {
+    cellSize: Math.max(2, Number($("#silkCellNumber").value) * previewScale),
+    angle: Number($("#silkAngleNumber").value)
+  }, 60);
+  bindRangeAndNumber("#silkCellRange", "#silkCellNumber", render);
+  bindRangeAndNumber("#silkAngleRange", "#silkAngleNumber", render);
+  $("#silkScreenOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = { cellSize: Number($("#silkCellNumber").value), angle: Number($("#silkAngleNumber").value) };
+    $("#silkScreenDialog").close();
+    await applyWorkerOperation("シルクスクリーン", "silkScreen", params);
+  });
+  $("#silkScreenDialog").addEventListener("close", hidePreview);
+  $("#silkScreenDialog").addEventListener("cancel", hidePreview);
+}
+
 function openWaveDialog() {
   $("#waveAmplitudeRange").value = $("#waveAmplitudeNumber").value = 12;
   $("#waveLengthRange").value = $("#waveLengthNumber").value = 48;
@@ -1900,6 +2023,10 @@ setupEdgeExtractDialog();
 setupNoiseDialog();
 setupDiffuseDialog();
 setupGlassDialog();
+setupSoftLensDialog();
+setupMotionBlurDialog();
+setupBevelDialog();
+setupSilkScreenDialog();
 setupWaveDialog();
 setupBlockDialog();
 setupFadeDialog();
