@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JTrim 1.53c の機能体系を現代のブラウザで再実装する軽量画像編集アプリ">
+  <title>JTrim Web</title>
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="app-header">
+      <div class="brand-row">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">◒</span>
+          <strong>JTrim Web</strong>
+          <span class="version">v0.1.0</span>
+        </div>
+        <div class="privacy-note">画像はブラウザ内で処理されます</div>
+      </div>
+
+      <nav class="menu-bar" aria-label="メインメニュー">
+        <div class="menu">
+          <button class="menu-trigger">ファイル(F)</button>
+          <div class="menu-popup">
+            <button data-command="file.new">新規作成(N)… <kbd>Ctrl+N</kbd></button>
+            <button data-command="file.open">開く(O)… <kbd>Ctrl+O</kbd></button>
+            <hr>
+            <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Shift+A</kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">編集(E)</button>
+          <div class="menu-popup">
+            <button data-command="edit.undo">元に戻す(U) <kbd>Ctrl+Z</kbd></button>
+            <button data-command="edit.redo">やり直し(R) <kbd>Ctrl+Y</kbd></button>
+            <hr>
+            <button data-command="edit.selectAll">全選択／選択解除(A) <kbd>Ctrl+A</kbd></button>
+            <button data-command="edit.clearSelection">選択解除</button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">表示(V)</button>
+          <div class="menu-popup">
+            <button data-command="view.fit">ウィンドウに合わせる</button>
+            <button data-command="view.actual">100%</button>
+            <button data-command="view.zoomIn">ズームイン(+) <kbd>Ctrl++</kbd></button>
+            <button data-command="view.zoomOut">ズームアウト(-) <kbd>Ctrl+-</kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">イメージ(I)</button>
+          <div class="menu-popup">
+            <button data-command="image.resize">リサイズ(S)… <kbd>Ctrl+R</kbd></button>
+            <button data-command="image.crop">切り抜き(T) <kbd>Ctrl+T</kbd></button>
+            <hr>
+            <button data-command="image.rotateLeft">左へ90度回転(L)</button>
+            <button data-command="image.rotateRight">右へ90度回転(R)</button>
+            <button data-command="image.flipH">ミラー(M) <kbd>Ctrl+M</kbd></button>
+            <button data-command="image.flipV">フリップ(F) <kbd>Ctrl+F</kbd></button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">カラー(C)</button>
+          <div class="menu-popup">
+            <button data-command="color.grayscale">グレースケール変換(G) <kbd>Ctrl+G</kbd></button>
+            <button data-command="color.sepia">セピア色変換(P)</button>
+            <button data-command="color.invert">ネガポジ反転(N)</button>
+            <hr>
+            <button data-command="color.brightnessContrast">明るさ／コントラスト(B)…</button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">加工(T)</button>
+          <div class="menu-popup">
+            <button data-command="filter.gaussianBlur">ガウスぼかし(G)…</button>
+            <button data-command="edit.text">文字入れ(O)…</button>
+          </div>
+        </div>
+        <div class="menu">
+          <button class="menu-trigger">ヘルプ(H)</button>
+          <div class="menu-popup align-right">
+            <button data-command="help.about">バージョン情報(V)…</button>
+          </div>
+        </div>
+      </nav>
+
+      <div class="toolbar" aria-label="ツールバー">
+        <button class="tool" data-command="file.open" title="開く (Ctrl+O)">📂<span>開く</span></button>
+        <button class="tool" data-command="file.save" title="保存">💾<span>保存</span></button>
+        <span class="separator"></span>
+        <button class="tool" data-command="edit.undo" title="元に戻す (Ctrl+Z)">↶<span>戻す</span></button>
+        <button class="tool" data-command="edit.redo" title="やり直し (Ctrl+Y)">↷<span>進む</span></button>
+        <span class="separator"></span>
+        <button class="tool" data-command="image.crop" title="切り抜き (Ctrl+T)">✂<span>切抜</span></button>
+        <button class="tool" data-command="image.resize" title="リサイズ (Ctrl+R)">↔<span>リサイズ</span></button>
+        <button class="tool" data-command="image.rotateLeft" title="左へ90度回転">⟲<span>左90°</span></button>
+        <button class="tool" data-command="image.rotateRight" title="右へ90度回転">⟳<span>右90°</span></button>
+        <span class="separator"></span>
+        <button class="tool" data-command="color.brightnessContrast" title="明るさ／コントラスト">☀<span>明暗</span></button>
+        <button class="tool" data-command="filter.gaussianBlur" title="ガウスぼかし">◌<span>ぼかし</span></button>
+        <button class="tool" data-command="edit.text" title="文字入れ">A<span>文字</span></button>
+        <span class="toolbar-spacer"></span>
+        <label class="zoom-control">ズーム
+          <select id="zoomSelect">
+            <option value="fit">全体</option>
+            <option value="0.25">25%</option>
+            <option value="0.5">50%</option>
+            <option value="0.75">75%</option>
+            <option value="1" selected>100%</option>
+            <option value="1.25">125%</option>
+            <option value="1.5">150%</option>
+            <option value="2">200%</option>
+            <option value="3">300%</option>
+            <option value="4">400%</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🖼️</div>
+        <h1>画像を開いて編集</h1>
+        <p>PNG / JPEG / WebP / GIF / BMP など、ブラウザで読み込める画像に対応します。</p>
+        <div class="empty-actions">
+          <button class="primary" data-command="file.open">画像を開く</button>
+          <button data-command="file.new">新規画像</button>
+        </div>
+        <p class="hint">画像ファイルをここへドラッグ＆ドロップすることもできます。</p>
+      </div>
+
+      <div class="canvas-scroller" id="canvasScroller" hidden>
+        <div class="canvas-stage" id="canvasStage">
+          <canvas id="imageCanvas"></canvas>
+          <canvas id="previewCanvas" hidden></canvas>
+          <canvas id="overlayCanvas"></canvas>
+        </div>
+      </div>
+    </main>
+
+    <footer class="status-bar">
+      <span id="statusFile">画像未読込</span>
+      <span id="statusSize">—</span>
+      <span id="statusPosition">x: —, y: —</span>
+      <span id="statusColor">RGB: —</span>
+      <span id="statusSelection">選択なし</span>
+      <span class="status-spacer"></span>
+      <span id="statusZoom">100%</span>
+      <span id="statusMessage">準備完了</span>
+    </footer>
+  </div>
+
+  <input id="fileInput" type="file" accept="image/*" hidden>
+
+  <dialog id="newDialog" class="modal">
+    <form method="dialog" id="newForm">
+      <div class="dialog-head"><h2>新規作成</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="field-grid">
+          <label>横 <input id="newWidth" type="number" min="1" max="20000" value="800"> px</label>
+          <label>縦 <input id="newHeight" type="number" min="1" max="20000" value="600"> px</label>
+          <label>背景色 <input id="newColor" type="color" value="#ffffff"></label>
+        </div>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="newOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="resizeDialog" class="modal wide-modal">
+    <form method="dialog" id="resizeForm">
+      <div class="dialog-head"><h2>リサイズ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <p>現在のサイズ: <strong id="resizeCurrent">—</strong></p>
+        <fieldset>
+          <legend><label><input type="radio" name="resizeMode" value="size" checked> サイズで指定する</label></legend>
+          <div class="inline-fields">
+            <label>横 <input id="resizeWidth" type="number" min="1" max="30000"> px</label>
+            <span>×</span>
+            <label>縦 <input id="resizeHeight" type="number" min="1" max="30000"> px</label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend><label><input type="radio" name="resizeMode" value="percent"> 比率で指定する</label></legend>
+          <div class="inline-fields">
+            <label>横 <input id="resizePercentX" type="number" min="1" max="1000" value="100"> %</label>
+            <span>×</span>
+            <label>縦 <input id="resizePercentY" type="number" min="1" max="1000" value="100"> %</label>
+          </div>
+        </fieldset>
+        <label class="check-row"><input id="resizeKeepAspect" type="checkbox" checked> 縦横の比率を保持する</label>
+        <div class="inline-fields resample-row">
+          <label class="check-row"><input id="resizeResample" type="checkbox" checked> 再サンプリングを行う</label>
+          <select id="resizeMethod">
+            <option value="box">Box</option>
+            <option value="hermite">Hermite</option>
+            <option value="triangle">Triangle</option>
+            <option value="bell">Bell</option>
+            <option value="mitchell">Mitchell</option>
+            <option value="bspline">BSpline</option>
+            <option value="lanczos3" selected>Lanczos3</option>
+          </select>
+        </div>
+        <p class="help-text">JTrimと同じ7種類の再サンプリング方式を選択できます。画素互換性は今後、原版出力との比較で検証します。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="resizeOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="adjustDialog" class="modal preview-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>明るさ／コントラスト</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>明るさ</span><input id="brightnessRange" type="range" min="-100" max="100" value="0"><input id="brightnessNumber" type="number" min="-100" max="100" value="0"></label>
+        <label class="slider-row"><span>コントラスト</span><input id="contrastRange" type="range" min="-100" max="100" value="0"><input id="contrastNumber" type="number" min="-100" max="100" value="0"></label>
+        <p class="help-text">変更はリアルタイムでプレビューされ、OKを押したときだけ画像に確定します。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel" id="adjustCancel">キャンセル</button><button class="primary" id="adjustOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="blurDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ガウスぼかし</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>ぼかしのレベル (1～10)</span><input id="blurRange" type="range" min="1" max="10" value="3"><input id="blurNumber" type="number" min="1" max="10" value="3"></label>
+        <p class="help-text">現段階ではJTrimに視覚的に近いガウス処理です。画素単位の互換性は後続フェーズで調整します。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel" id="blurCancel">キャンセル</button><button class="primary" id="blurOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="textDialog" class="modal wide-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>文字入れ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="text-toolbar">
+          <label>フォント <select id="textFont"><option value="sans-serif">ゴシック</option><option value="serif">明朝</option><option value="monospace">等幅</option><option value="'Yu Gothic', sans-serif">游ゴシック</option><option value="'Meiryo', sans-serif">メイリオ</option></select></label>
+          <label>サイズ <input id="textSize" type="number" min="6" max="500" value="32"></label>
+          <label><input id="textBold" type="checkbox"> <strong>B</strong></label>
+          <label><input id="textItalic" type="checkbox"> <em>I</em></label>
+          <label><input id="textUnderline" type="checkbox"> <u>U</u></label>
+          <label>文字色 <input id="textColor" type="color" value="#000000"></label>
+          <label>不透明率 <input id="textOpacity" type="number" min="0" max="100" value="100">%</label>
+        </div>
+        <textarea id="textValue" rows="5" placeholder="文字を入力"></textarea>
+        <div class="inline-fields">
+          <label>X <input id="textX" type="number" min="-99999" max="99999" value="20"></label>
+          <label>Y <input id="textY" type="number" min="-99999" max="99999" value="20"></label>
+        </div>
+        <p class="help-text">選択範囲がある場合、その左上を初期位置にします。配置のドラッグ操作や縦書き等は今後拡張します。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel" id="textCancel">キャンセル</button><button class="primary" id="textOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="saveDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>名前を付けて保存</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="stack-field">形式
+          <select id="saveType"><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option><option value="image/webp">WebP</option></select>
+        </label>
+        <label class="slider-row"><span>品質</span><input id="saveQuality" type="range" min="10" max="100" value="92"><output id="saveQualityOutput">92</output></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="saveOk" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="aboutDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body about">
+        <p><strong>JTrim Web v0.1.0</strong></p>
+        <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
+        <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
+        <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
+      </div>
+      <div class="dialog-actions"><button class="primary" value="default">閉じる</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
