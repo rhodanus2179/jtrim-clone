@@ -249,6 +249,147 @@ export function addMargin(canvas, { top = 0, right = 0, bottom = 0, left = 0, co
   ctx.drawImage(temp, left, top);
 }
 
+
+export function copyRegion(canvas, selection = null) {
+  const region = normalizedRegion(canvas, selection);
+  if (region.width < 1 || region.height < 1) return null;
+  const out = document.createElement("canvas");
+  out.width = region.width;
+  out.height = region.height;
+  out.getContext("2d").drawImage(
+    canvas,
+    region.x, region.y, region.width, region.height,
+    0, 0, region.width, region.height
+  );
+  return out;
+}
+
+export function clearRegion(canvas, selection = null, color = "#ffffff") {
+  const region = normalizedRegion(canvas, selection);
+  if (region.width < 1 || region.height < 1) return;
+  const ctx = context(canvas);
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.fillRect(region.x, region.y, region.width, region.height);
+  ctx.restore();
+}
+
+export function pasteCanvas(canvas, sourceCanvas, x = 0, y = 0, opacity = 1) {
+  if (!sourceCanvas) return;
+  const ctx = context(canvas);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, Number(opacity) || 0));
+  ctx.drawImage(sourceCanvas, Math.round(x), Math.round(y));
+  ctx.restore();
+}
+
+export function compositeCanvas(canvas, sourceCanvas, {
+  x = 0, y = 0, opacity = 1, mode = "alpha"
+} = {}) {
+  if (!sourceCanvas) return;
+  x = Math.round(Number(x) || 0);
+  y = Math.round(Number(y) || 0);
+  opacity = Math.max(0, Math.min(1, Number(opacity) || 0));
+
+  if (mode === "alpha" || mode === "overwrite") {
+    const ctx = context(canvas);
+    ctx.save();
+    ctx.globalAlpha = mode === "overwrite" ? 1 : opacity;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(sourceCanvas, x, y);
+    ctx.restore();
+    return;
+  }
+
+  const ctx = context(canvas);
+  const sx0 = Math.max(0, -x);
+  const sy0 = Math.max(0, -y);
+  const dx0 = Math.max(0, x);
+  const dy0 = Math.max(0, y);
+  const width = Math.min(sourceCanvas.width - sx0, canvas.width - dx0);
+  const height = Math.min(sourceCanvas.height - sy0, canvas.height - dy0);
+  if (width <= 0 || height <= 0) return;
+
+  const base = ctx.getImageData(dx0, dy0, width, height);
+  const sctx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  const src = sctx.getImageData(sx0, sy0, width, height);
+  const bd = base.data, sd = src.data;
+
+  for (let i = 0; i < bd.length; i += 4) {
+    const sa = (sd[i + 3] / 255) * opacity;
+    if (sa <= 0) continue;
+    for (let ch = 0; ch < 3; ch++) {
+      const b = bd[i + ch];
+      const v = sd[i + ch];
+      let mixed;
+      switch (mode) {
+        case "add": mixed = Math.min(255, b + v); break;
+        case "subtract": mixed = Math.max(0, b - v); break;
+        case "lighten": mixed = Math.max(b, v); break;
+        case "darken": mixed = Math.min(b, v); break;
+        default: mixed = v;
+      }
+      bd[i + ch] = Math.round(b * (1 - sa) + mixed * sa);
+    }
+    bd[i + 3] = Math.max(bd[i + 3], Math.round(sd[i + 3] * opacity));
+  }
+  ctx.putImageData(base, dx0, dy0);
+}
+
+export function joinCanvas(canvas, otherCanvas, {
+  direction = "right", spacing = 0, offset = 0, color = "#ffffff"
+} = {}) {
+  if (!otherCanvas) return;
+  spacing = Math.max(0, Math.round(Number(spacing) || 0));
+  offset = Math.round(Number(offset) || 0);
+
+  const base = document.createElement("canvas");
+  base.width = canvas.width;
+  base.height = canvas.height;
+  base.getContext("2d").drawImage(canvas, 0, 0);
+
+  const horizontal = direction === "left" || direction === "right";
+  let width, height, baseX = 0, baseY = 0, otherX = 0, otherY = 0;
+
+  if (horizontal) {
+    const minY = Math.min(0, offset);
+    const maxY = Math.max(base.height, offset + otherCanvas.height);
+    width = base.width + spacing + otherCanvas.width;
+    height = maxY - minY;
+    baseY = -minY;
+    otherY = offset - minY;
+    if (direction === "left") {
+      otherX = 0;
+      baseX = otherCanvas.width + spacing;
+    } else {
+      baseX = 0;
+      otherX = base.width + spacing;
+    }
+  } else {
+    const minX = Math.min(0, offset);
+    const maxX = Math.max(base.width, offset + otherCanvas.width);
+    width = maxX - minX;
+    height = base.height + spacing + otherCanvas.height;
+    baseX = -minX;
+    otherX = offset - minX;
+    if (direction === "top") {
+      otherY = 0;
+      baseY = otherCanvas.height + spacing;
+    } else {
+      baseY = 0;
+      otherY = base.height + spacing;
+    }
+  }
+
+  canvas.width = Math.max(1, width);
+  canvas.height = Math.max(1, height);
+  const ctx = context(canvas);
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(base, baseX, baseY);
+  ctx.drawImage(otherCanvas, otherX, otherY);
+}
+
 export function drawText(canvas, options) {
   const ctx = context(canvas);
   const {
