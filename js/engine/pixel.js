@@ -977,6 +977,201 @@ export function silkScreenImageData(source, cellSize = 5, angle = 45, selection 
   return out;
 }
 
+
+export function colorScaleImageData(source, color = "#ff0000", selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const target = parseHexColor(color);
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      d[i] = clamp255(target[0] * lum);
+      d[i + 1] = clamp255(target[1] * lum);
+      d[i + 2] = clamp255(target[2] * lum);
+    }
+  }
+  return out;
+}
+
+export function rgbExchangeImageData(source, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      d[i] = g;
+      d[i + 1] = b;
+      d[i + 2] = r;
+    }
+  }
+  return out;
+}
+
+export function xorColorImageData(source, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      d[i] ^= 128;
+      d[i + 1] ^= 128;
+      d[i + 2] ^= 128;
+    }
+  }
+  return out;
+}
+
+export function gradientImageData(source, startColor, endColor, direction = "horizontal", opacity = 50, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const start = parseHexColor(startColor);
+  const end = parseHexColor(endColor);
+  const b = regionBounds(source, selection);
+  const alpha = Math.max(0, Math.min(1, Number(opacity) / 100));
+  const width = Math.max(1, b.x1 - b.x0 - 1);
+  const height = Math.max(1, b.y1 - b.y0 - 1);
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      let t;
+      switch (direction) {
+        case "vertical":
+          t = (y - b.y0) / height;
+          break;
+        case "diag-down":
+          t = ((x - b.x0) / width + (y - b.y0) / height) / 2;
+          break;
+        case "diag-up":
+          t = ((x - b.x0) / width + 1 - (y - b.y0) / height) / 2;
+          break;
+        default:
+          t = (x - b.x0) / width;
+      }
+      const gr = start[0] * (1 - t) + end[0] * t;
+      const gg = start[1] * (1 - t) + end[1] * t;
+      const gb = start[2] * (1 - t) + end[2] * t;
+      const i = (y * source.width + x) * 4;
+      d[i] = clamp255(d[i] * (1 - alpha) + gr * alpha);
+      d[i + 1] = clamp255(d[i + 1] * (1 - alpha) + gg * alpha);
+      d[i + 2] = clamp255(d[i + 2] * (1 - alpha) + gb * alpha);
+    }
+  }
+  return out;
+}
+
+export function shadowHighlightImageData(source, shadows = 0, highlights = 0, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  shadows = Math.max(-100, Math.min(100, Number(shadows) || 0));
+  highlights = Math.max(-100, Math.min(100, Number(highlights) || 0));
+
+  for (let y = b.y0; y < b.y1; y++) {
+    let i = (y * source.width + b.x0) * 4;
+    const end = (y * source.width + b.x1) * 4;
+    for (; i < end; i += 4) {
+      const lum = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      const shadowWeight = Math.pow(1 - lum, 2);
+      const highlightWeight = Math.pow(lum, 2);
+      const delta = shadows * 1.8 * shadowWeight - highlights * 1.8 * highlightWeight;
+      d[i] = clamp255(d[i] + delta);
+      d[i + 1] = clamp255(d[i + 1] + delta);
+      d[i + 2] = clamp255(d[i + 2] + delta);
+    }
+  }
+  return out;
+}
+
+export function transparentColorImageData(source, color = "#ffffff", tolerance = 0) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const target = parseHexColor(color);
+  tolerance = Math.max(0, Math.min(255, Number(tolerance) || 0));
+
+  for (let i = 0; i < d.length; i += 4) {
+    if (
+      Math.abs(d[i] - target[0]) <= tolerance &&
+      Math.abs(d[i + 1] - target[1]) <= tolerance &&
+      Math.abs(d[i + 2] - target[2]) <= tolerance
+    ) d[i + 3] = 0;
+  }
+  return out;
+}
+
+export function usedColorCount(source) {
+  const set = new Set();
+  const d = source.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    set.add((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+  }
+  return set.size;
+}
+
+function nearestPaletteValue(value, levels) {
+  if (levels <= 1) return value >= 128 ? 255 : 0;
+  return Math.round(Math.round(value / 255 * (levels - 1)) * 255 / (levels - 1));
+}
+
+function quantizeChannels(r, g, b, mode) {
+  if (mode === "256") return [nearestPaletteValue(r, 8), nearestPaletteValue(g, 8), nearestPaletteValue(b, 4)];
+  if (mode === "16") return [nearestPaletteValue(r, 2), nearestPaletteValue(g, 4), nearestPaletteValue(b, 2)];
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const v = lum >= 128 ? 255 : 0;
+  return [v, v, v];
+}
+
+export function colorDepthImageData(source, mode = "256", dither = false) {
+  if (mode === "24") return cloneImageData(source);
+  const out = cloneImageData(source);
+  const d = out.data;
+  const w = source.width, h = source.height;
+
+  if (!dither) {
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, g, b] = quantizeChannels(d[i], d[i + 1], d[i + 2], mode);
+      d[i] = r; d[i + 1] = g; d[i + 2] = b;
+    }
+    return out;
+  }
+
+  const work = new Float32Array(d.length);
+  for (let i = 0; i < d.length; i++) work[i] = d[i];
+
+  const addError = (x, y, er, eg, eb, factor) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    const i = (y * w + x) * 4;
+    work[i] += er * factor;
+    work[i + 1] += eg * factor;
+    work[i + 2] += eb * factor;
+  };
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const oldR = Math.max(0, Math.min(255, work[i]));
+      const oldG = Math.max(0, Math.min(255, work[i + 1]));
+      const oldB = Math.max(0, Math.min(255, work[i + 2]));
+      const [nr, ng, nb] = quantizeChannels(oldR, oldG, oldB, mode);
+      d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+      const er = oldR - nr, eg = oldG - ng, eb = oldB - nb;
+      addError(x + 1, y, er, eg, eb, 7 / 16);
+      addError(x - 1, y + 1, er, eg, eb, 3 / 16);
+      addError(x, y + 1, er, eg, eb, 5 / 16);
+      addError(x + 1, y + 1, er, eg, eb, 1 / 16);
+    }
+  }
+  return out;
+}
+
 function gaussianKernel(level) {
   const radius = Math.max(1, Math.round(level));
   const sigma = Math.max(.65, level * .72);
