@@ -1172,6 +1172,74 @@ export function colorDepthImageData(source, mode = "256", dither = false) {
   return out;
 }
 
+
+export function redEyeImageData(source, selection = null, strength = 80) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const b = regionBounds(source, selection);
+  const mix = Math.max(0, Math.min(1, Number(strength) / 100));
+
+  for (let y = b.y0; y < b.y1; y++) {
+    let i = (y * source.width + b.x0) * 4;
+    const end = (y * source.width + b.x1) * 4;
+    for (; i < end; i += 4) {
+      const r = d[i], g = d[i + 1], bl = d[i + 2];
+      const base = (g + bl) / 2;
+      const redness = r - Math.max(g, bl);
+      if (r > 70 && redness > 25 && r > g * 1.25 && r > bl * 1.2) {
+        const targetR = Math.min(r, base * 1.05);
+        d[i] = clamp255(r * (1 - mix) + targetR * mix);
+      }
+    }
+  }
+  return out;
+}
+
+function neighborhoodStatisticImageData(source, mode = "median", radius = 1, selection = null) {
+  const out = cloneImageData(source);
+  const src = source.data, dst = out.data;
+  const w = source.width, h = source.height;
+  const b = regionBounds(source, selection);
+  radius = Math.max(1, Math.min(2, Math.round(Number(radius) || 1)));
+  const valuesR = [], valuesG = [], valuesB = [];
+
+  for (let y = b.y0; y < b.y1; y++) {
+    for (let x = b.x0; x < b.x1; x++) {
+      valuesR.length = valuesG.length = valuesB.length = 0;
+      for (let yy = Math.max(0, y - radius); yy <= Math.min(h - 1, y + radius); yy++) {
+        for (let xx = Math.max(0, x - radius); xx <= Math.min(w - 1, x + radius); xx++) {
+          const si = (yy * w + xx) * 4;
+          valuesR.push(src[si]); valuesG.push(src[si + 1]); valuesB.push(src[si + 2]);
+        }
+      }
+      const di = (y * w + x) * 4;
+      if (mode === "min") {
+        dst[di] = Math.min(...valuesR); dst[di + 1] = Math.min(...valuesG); dst[di + 2] = Math.min(...valuesB);
+      } else if (mode === "max") {
+        dst[di] = Math.max(...valuesR); dst[di + 1] = Math.max(...valuesG); dst[di + 2] = Math.max(...valuesB);
+      } else {
+        valuesR.sort((a,b)=>a-b); valuesG.sort((a,b)=>a-b); valuesB.sort((a,b)=>a-b);
+        const mid = Math.floor(valuesR.length / 2);
+        dst[di] = valuesR[mid]; dst[di + 1] = valuesG[mid]; dst[di + 2] = valuesB[mid];
+      }
+    }
+  }
+  return out;
+}
+
+export function denoiseImageData(source, level = 1, selection = null) {
+  level = Math.max(1, Math.min(5, Math.round(Number(level) || 1)));
+  let current = source;
+  for (let pass = 0; pass < Math.ceil(level / 2); pass++) {
+    current = neighborhoodStatisticImageData(current, "median", level >= 4 ? 2 : 1, selection);
+  }
+  return current;
+}
+
+export function densityExtractImageData(source, mode = "median", selection = null) {
+  return neighborhoodStatisticImageData(source, mode, 1, selection);
+}
+
 function gaussianKernel(level) {
   const radius = Math.max(1, Math.round(level));
   const sigma = Math.max(.65, level * .72);
