@@ -12,7 +12,7 @@ export class ImageWorkerClient {
         pending.reject(new Error(error));
         return;
       }
-      if (resultType === "histogram") {
+      if (resultType) {
         pending.resolve(payload);
         return;
       }
