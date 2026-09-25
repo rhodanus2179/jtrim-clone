@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.3.0</span>
+          <span class="version">v0.4.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -104,6 +104,20 @@
             <button data-command="filter.mosaic">モザイク(I)…</button>
             <button data-command="filter.glass">ガラス処理(V)…</button>
             <button data-command="filter.pencil">鉛筆画(X)</button>
+            <button data-command="filter.wave">ウェーブ(W)…</button>
+            <button data-command="filter.block">ブロック(K)…</button>
+            <button data-command="filter.fade">フェードアウト(F)…</button>
+            <button data-command="filter.oilPaint">オイルペイント(Y)…</button>
+            <button data-command="filter.swirl">渦巻き(Z)…</button>
+            <button data-command="filter.punch">パンチ(J)…</button>
+            <button data-command="filter.pinch">つまむ(L)…</button>
+            <button data-command="filter.spotlight">スポットライト(U)…</button>
+            <button data-command="filter.blinds">ブラインド(T)…</button>
+            <button data-command="filter.supernova">超新星(A)…</button>
+            <button data-command="filter.ripple">波紋(Q)…</button>
+            <button data-command="filter.newspaper">新聞写真風(U)…</button>
+            <hr>
+            <button data-command="filter.custom">カスタムフィルタ(C)…</button>
             <hr>
             <button data-command="edit.text">文字入れ(O)…</button>
           </div>
@@ -555,6 +569,150 @@
     </form>
   </dialog>
 
+
+  <dialog id="waveDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ウェーブ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>振幅</span><input id="waveAmplitudeRange" type="range" min="0" max="100" value="12"><input id="waveAmplitudeNumber" type="number" min="0" max="200" value="12"></label>
+        <label class="slider-row"><span>波長</span><input id="waveLengthRange" type="range" min="4" max="200" value="48"><input id="waveLengthNumber" type="number" min="2" max="1000" value="48"></label>
+        <label>方向 <select id="waveDirection"><option value="horizontal">横</option><option value="vertical">縦</option><option value="both">縦＋横</option></select></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="waveOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="blockDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ブロック</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>ブロック幅</span><input id="blockSizeRange" type="range" min="2" max="80" value="12"><input id="blockSizeNumber" type="number" min="2" max="200" value="12"></label>
+        <label class="check-row"><input id="blockStagger" type="checkbox"> 段を半分ずらす</label>
+        <label class="check-row"><input id="blockBorder" type="checkbox"> 枠線</label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="blockOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="fadeDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>フェードアウト</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>強さ</span><input id="fadeStrengthRange" type="range" min="0" max="100" value="100"><input id="fadeStrengthNumber" type="number" min="0" max="100" value="100"></label>
+        <label>形状 <select id="fadeShape"><option value="ellipse">円形</option><option value="rectangle">矩形</option></select></label>
+        <label>背景色 <input id="fadeColor" type="color" value="#ffffff"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="fadeOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="oilPaintDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>オイルペイント</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>にじみ (1～5)</span><input id="oilRadiusRange" type="range" min="1" max="5" value="3"><input id="oilRadiusNumber" type="number" min="1" max="5" value="3"></label>
+        <label class="slider-row"><span>階調</span><input id="oilLevelsRange" type="range" min="8" max="48" value="24"><input id="oilLevelsNumber" type="number" min="8" max="64" value="24"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="oilPaintOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="swirlDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>渦巻き</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>角度</span><input id="swirlRange" type="range" min="-540" max="540" value="180"><input id="swirlNumber" type="number" min="-540" max="540" value="180"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="swirlOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="radialWarpDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2 id="radialWarpTitle">パンチ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>強さ</span><input id="radialWarpRange" type="range" min="1" max="100" value="50"><input id="radialWarpNumber" type="number" min="1" max="100" value="50"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="radialWarpOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="spotlightDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>スポットライト</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields"><label>X <input id="spotX" type="number" value="0"></label><label>Y <input id="spotY" type="number" value="0"></label></div>
+        <label class="slider-row"><span>光源サイズ</span><input id="spotRadiusRange" type="range" min="10" max="500" value="120"><input id="spotRadiusNumber" type="number" min="1" max="5000" value="120"></label>
+        <label class="slider-row"><span>明るさ</span><input id="spotStrengthRange" type="range" min="-100" max="100" value="60"><input id="spotStrengthNumber" type="number" min="-100" max="100" value="60"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="spotlightOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="blindsDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>ブラインド</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>幅</span><input id="blindsWidthRange" type="range" min="2" max="80" value="10"><input id="blindsWidthNumber" type="number" min="2" max="200" value="10"></label>
+        <label>方向 <select id="blindsDirection"><option value="horizontal">横</option><option value="vertical">縦</option></select></label>
+        <label>色 <input id="blindsColor" type="color" value="#000000"></label>
+        <label class="slider-row"><span>不透明率</span><input id="blindsOpacityRange" type="range" min="0" max="100" value="30"><input id="blindsOpacityNumber" type="number" min="0" max="100" value="30"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="blindsOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="supernovaDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>超新星</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields"><label>X <input id="supernovaX" type="number" value="0"></label><label>Y <input id="supernovaY" type="number" value="0"></label></div>
+        <label class="slider-row"><span>半径</span><input id="supernovaRadiusRange" type="range" min="10" max="500" value="100"><input id="supernovaRadiusNumber" type="number" min="5" max="5000" value="100"></label>
+        <label class="slider-row"><span>放射線数</span><input id="supernovaRaysRange" type="range" min="4" max="100" value="24"><input id="supernovaRaysNumber" type="number" min="4" max="200" value="24"></label>
+        <label>色 <input id="supernovaColor" type="color" value="#fff2a0"></label>
+        <label class="check-row"><input id="supernovaRandomHue" type="checkbox"> 放射線の色相をランダム化</label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="supernovaOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="rippleDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>波紋</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>振幅</span><input id="rippleAmplitudeRange" type="range" min="0" max="50" value="8"><input id="rippleAmplitudeNumber" type="number" min="0" max="100" value="8"></label>
+        <label class="slider-row"><span>波長</span><input id="rippleLengthRange" type="range" min="4" max="120" value="28"><input id="rippleLengthNumber" type="number" min="2" max="500" value="28"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="rippleOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="newspaperDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>新聞写真風</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label class="slider-row"><span>網点サイズ</span><input id="newspaperRange" type="range" min="1" max="12" value="4"><input id="newspaperNumber" type="number" min="1" max="16" value="4"></label>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="newspaperOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="customFilterDialog" class="modal wide-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>カスタムフィルタ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div id="customKernel" style="display:grid;grid-template-columns:repeat(3,90px);gap:6px;justify-content:center">
+          <input class="kernel" type="number" value="0"><input class="kernel" type="number" value="-1"><input class="kernel" type="number" value="0">
+          <input class="kernel" type="number" value="-1"><input class="kernel" type="number" value="5"><input class="kernel" type="number" value="-1">
+          <input class="kernel" type="number" value="0"><input class="kernel" type="number" value="-1"><input class="kernel" type="number" value="0">
+        </div>
+        <div class="inline-fields"><label>除数 <input id="customDivisor" type="number" step="0.01" value="1"></label><label>オフセット <input id="customOffset" type="number" value="0"></label></div>
+        <div class="inline-fields"><button type="button" id="customPresetSharpen">シャープ</button><button type="button" id="customPresetEdge">エッジ</button><button type="button" id="customPresetEmboss">エンボス</button></div>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="customFilterOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
   <dialog id="saveDialog" class="modal">
     <form method="dialog">
       <div class="dialog-head"><h2>名前を付けて保存</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
@@ -572,7 +730,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.3.0</strong></p>
+        <p><strong>JTrim Web v0.4.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
