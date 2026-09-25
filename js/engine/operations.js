@@ -388,16 +388,40 @@ export function addShadow(canvas, selection = null, {
   if (region.width < 1 || region.height < 1) return false;
 
   const source = copyRegion(canvas, region);
+  const ox = Number(offsetX) || 0;
+  const oy = Number(offsetY) || 0;
+  const blurValue = Math.max(0, Number(blur) || 0);
+  const shadowColor = hexWithAlpha(color, Math.max(0, Math.min(100, Number(opacity) || 0)) / 100);
+
+  if (!selection) {
+    const pad = Math.ceil(blurValue * 2);
+    const left = pad + Math.max(0, -Math.round(ox));
+    const top = pad + Math.max(0, -Math.round(oy));
+    const right = pad + Math.max(0, Math.round(ox));
+    const bottom = pad + Math.max(0, Math.round(oy));
+    canvas.width = source.width + left + right;
+    canvas.height = source.height + top + bottom;
+    const ctx = context(canvas);
+    ctx.save();
+    ctx.shadowOffsetX = ox;
+    ctx.shadowOffsetY = oy;
+    ctx.shadowBlur = blurValue;
+    ctx.shadowColor = shadowColor;
+    ctx.drawImage(source, left, top);
+    ctx.restore();
+    ctx.drawImage(source, left, top);
+    return true;
+  }
+
   const ctx = context(canvas);
   ctx.save();
-  ctx.shadowOffsetX = Number(offsetX) || 0;
-  ctx.shadowOffsetY = Number(offsetY) || 0;
-  ctx.shadowBlur = Math.max(0, Number(blur) || 0);
-  ctx.shadowColor = hexWithAlpha(color, Math.max(0, Math.min(100, Number(opacity) || 0)) / 100);
-  ctx.fillStyle = "rgba(0,0,0,0.001)";
-  ctx.fillRect(region.x, region.y, region.width, region.height);
+  ctx.shadowOffsetX = ox;
+  ctx.shadowOffsetY = oy;
+  ctx.shadowBlur = blurValue;
+  ctx.shadowColor = shadowColor;
   ctx.drawImage(source, region.x, region.y);
   ctx.restore();
+  ctx.drawImage(source, region.x, region.y);
   return true;
 }
 
