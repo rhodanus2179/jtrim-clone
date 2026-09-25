@@ -250,6 +250,157 @@ export function addMargin(canvas, { top = 0, right = 0, bottom = 0, left = 0, co
 }
 
 
+
+export function coordinateCrop(canvas, x, y, width, height) {
+  return cropCanvas(canvas, {
+    x: Math.round(Number(x) || 0),
+    y: Math.round(Number(y) || 0),
+    width: Math.round(Number(width) || 0),
+    height: Math.round(Number(height) || 0)
+  });
+}
+
+function buildMaskedCrop(canvas, selection, shape, options = {}) {
+  const region = normalizedRegion(canvas, selection);
+  if (region.width < 1 || region.height < 1) return false;
+
+  const {
+    background = "#ffffff",
+    radius = 24,
+    border = false,
+    borderWidth = 1,
+    borderColor = "#000000",
+    shadow = false,
+    shadowOffsetX = 5,
+    shadowOffsetY = 5,
+    shadowBlur = 6,
+    shadowOpacity = 35,
+    shadowColor = "#000000"
+  } = options;
+
+  const mask = document.createElement("canvas");
+  mask.width = region.width;
+  mask.height = region.height;
+  const mctx = mask.getContext("2d");
+  mctx.save();
+  beginShapePath(mctx, shape, region.width, region.height, radius);
+  mctx.clip();
+  mctx.drawImage(canvas, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
+  mctx.restore();
+
+  let padLeft = 0, padTop = 0, padRight = 0, padBottom = 0;
+  if (shadow) {
+    const blurPad = Math.ceil(Math.max(0, Number(shadowBlur) || 0) * 2);
+    const ox = Math.round(Number(shadowOffsetX) || 0);
+    const oy = Math.round(Number(shadowOffsetY) || 0);
+    padLeft = blurPad + Math.max(0, -ox);
+    padTop = blurPad + Math.max(0, -oy);
+    padRight = blurPad + Math.max(0, ox);
+    padBottom = blurPad + Math.max(0, oy);
+  }
+
+  canvas.width = region.width + padLeft + padRight;
+  canvas.height = region.height + padTop + padBottom;
+  const ctx = context(canvas);
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (shadow) {
+    ctx.save();
+    ctx.shadowOffsetX = Number(shadowOffsetX) || 0;
+    ctx.shadowOffsetY = Number(shadowOffsetY) || 0;
+    ctx.shadowBlur = Math.max(0, Number(shadowBlur) || 0);
+    ctx.shadowColor = hexWithAlpha(shadowColor, Math.max(0, Math.min(100, Number(shadowOpacity) || 0)) / 100);
+    ctx.drawImage(mask, padLeft, padTop);
+    ctx.restore();
+  }
+
+  ctx.drawImage(mask, padLeft, padTop);
+
+  if (border) {
+    ctx.save();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = Math.max(1, Number(borderWidth) || 1);
+    beginShapePath(ctx, shape, region.width, region.height, radius, padLeft, padTop);
+    ctx.stroke();
+    ctx.restore();
+  }
+  return true;
+}
+
+function beginShapePath(ctx, shape, width, height, radius = 24, offsetX = 0, offsetY = 0) {
+  ctx.beginPath();
+  if (shape === "ellipse") {
+    ctx.ellipse(offsetX + width / 2, offsetY + height / 2, Math.max(0, width / 2 - .5), Math.max(0, height / 2 - .5), 0, 0, Math.PI * 2);
+  } else {
+    const r = Math.max(0, Math.min(Number(radius) || 0, width / 2, height / 2));
+    ctx.roundRect(offsetX, offsetY, width, height, r);
+  }
+  ctx.closePath();
+}
+
+function hexWithAlpha(hex, alpha) {
+  const value = String(hex || "#000000").replace("#", "");
+  const r = parseInt(value.slice(0, 2), 16) || 0;
+  const g = parseInt(value.slice(2, 4), 16) || 0;
+  const b = parseInt(value.slice(4, 6), 16) || 0;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function circularCrop(canvas, selection = null, options = {}) {
+  return buildMaskedCrop(canvas, selection, "ellipse", options);
+}
+
+export function roundedCrop(canvas, selection = null, options = {}) {
+  return buildMaskedCrop(canvas, selection, "rounded", options);
+}
+
+export function shiftCanvas(canvas, dx = 0, dy = 0) {
+  dx = Math.round(Number(dx) || 0);
+  dy = Math.round(Number(dy) || 0);
+  const w = canvas.width, h = canvas.height;
+  if (!w || !h) return;
+  dx = ((dx % w) + w) % w;
+  dy = ((dy % h) + h) % h;
+
+  const temp = document.createElement("canvas");
+  temp.width = w;
+  temp.height = h;
+  temp.getContext("2d").drawImage(canvas, 0, 0);
+  const ctx = context(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  for (const ox of [dx - w, dx]) {
+    for (const oy of [dy - h, dy]) {
+      ctx.drawImage(temp, ox, oy);
+    }
+  }
+}
+
+export function addShadow(canvas, selection = null, {
+  offsetX = 6,
+  offsetY = 6,
+  blur = 8,
+  opacity = 40,
+  color = "#000000"
+} = {}) {
+  const region = normalizedRegion(canvas, selection);
+  if (region.width < 1 || region.height < 1) return false;
+
+  const source = copyRegion(canvas, region);
+  const ctx = context(canvas);
+  ctx.save();
+  ctx.shadowOffsetX = Number(offsetX) || 0;
+  ctx.shadowOffsetY = Number(offsetY) || 0;
+  ctx.shadowBlur = Math.max(0, Number(blur) || 0);
+  ctx.shadowColor = hexWithAlpha(color, Math.max(0, Math.min(100, Number(opacity) || 0)) / 100);
+  ctx.fillStyle = "rgba(0,0,0,0.001)";
+  ctx.fillRect(region.x, region.y, region.width, region.height);
+  ctx.drawImage(source, region.x, region.y);
+  ctx.restore();
+  return true;
+}
+
 export function copyRegion(canvas, selection = null) {
   const region = normalizedRegion(canvas, selection);
   if (region.width < 1 || region.height < 1) return null;
