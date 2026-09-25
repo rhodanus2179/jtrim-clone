@@ -328,9 +328,29 @@ function setupCommands() {
       enabled: documentReady,
       run: openHsvDialog
     })
+    .register("color.posterize", {
+      enabled: documentReady,
+      run: openPosterizeDialog
+    })
+    .register("color.solarize", {
+      enabled: documentReady,
+      run: openSolarizeDialog
+    })
+    .register("color.threshold", {
+      enabled: documentReady,
+      run: openThresholdDialog
+    })
     .register("filter.sharpen", {
       enabled: documentReady,
       run: openSharpenDialog
+    })
+    .register("filter.emboss", {
+      enabled: documentReady,
+      run: openEmbossDialog
+    })
+    .register("filter.edgeEnhance", {
+      enabled: documentReady,
+      run: openEdgeEnhanceDialog
     })
     .register("filter.gaussianBlur", {
       enabled: documentReady,
@@ -854,6 +874,117 @@ function setupMosaicDialog() {
   $("#mosaicDialog").addEventListener("cancel", hidePreview);
 }
 
+
+function openPosterizeDialog() {
+  $("#posterizeRange").value = $("#posterizeNumber").value = 8;
+  beginPreview(500_000);
+  scheduleWorkerPreview("posterize", { levels: 8 }, 55);
+  $("#posterizeDialog").showModal();
+}
+
+function setupPosterizeDialog() {
+  const render = () => scheduleWorkerPreview("posterize", { levels: Number($("#posterizeNumber").value) }, 55);
+  bindRangeAndNumber("#posterizeRange", "#posterizeNumber", render);
+  $("#posterizeOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const levels = Number($("#posterizeNumber").value);
+    $("#posterizeDialog").close();
+    await applyWorkerOperation("ポスタライズ", "posterize", { levels });
+  });
+  $("#posterizeDialog").addEventListener("close", hidePreview);
+  $("#posterizeDialog").addEventListener("cancel", hidePreview);
+}
+
+function openSolarizeDialog() {
+  $("#solarizeRange").value = $("#solarizeNumber").value = 128;
+  beginPreview(500_000);
+  scheduleWorkerPreview("solarize", { threshold: 128 }, 55);
+  $("#solarizeDialog").showModal();
+}
+
+function setupSolarizeDialog() {
+  const render = () => scheduleWorkerPreview("solarize", { threshold: Number($("#solarizeNumber").value) }, 55);
+  bindRangeAndNumber("#solarizeRange", "#solarizeNumber", render);
+  $("#solarizeOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const threshold = Number($("#solarizeNumber").value);
+    $("#solarizeDialog").close();
+    await applyWorkerOperation("ソラリゼーション", "solarize", { threshold });
+  });
+  $("#solarizeDialog").addEventListener("close", hidePreview);
+  $("#solarizeDialog").addEventListener("cancel", hidePreview);
+}
+
+function openThresholdDialog() {
+  $("#thresholdRange").value = $("#thresholdNumber").value = 128;
+  beginPreview(500_000);
+  scheduleWorkerPreview("threshold", { threshold: 128 }, 55);
+  $("#thresholdDialog").showModal();
+}
+
+function setupThresholdDialog() {
+  const render = () => scheduleWorkerPreview("threshold", { threshold: Number($("#thresholdNumber").value) }, 55);
+  bindRangeAndNumber("#thresholdRange", "#thresholdNumber", render);
+  $("#thresholdOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const threshold = Number($("#thresholdNumber").value);
+    $("#thresholdDialog").close();
+    await applyWorkerOperation("2階調化", "threshold", { threshold });
+  });
+  $("#thresholdDialog").addEventListener("close", hidePreview);
+  $("#thresholdDialog").addEventListener("cancel", hidePreview);
+}
+
+function openEmbossDialog() {
+  $("#embossRange").value = $("#embossNumber").value = 3;
+  $("#embossColor").checked = false;
+  beginPreview(360_000);
+  scheduleWorkerPreview("emboss", { level: 3, color: false }, 90);
+  $("#embossDialog").showModal();
+}
+
+function setupEmbossDialog() {
+  const render = () => scheduleWorkerPreview("emboss", {
+    level: Number($("#embossNumber").value),
+    color: $("#embossColor").checked
+  }, 90);
+  bindRangeAndNumber("#embossRange", "#embossNumber", render);
+  $("#embossColor").addEventListener("change", render);
+  $("#embossOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const params = { level: Number($("#embossNumber").value), color: $("#embossColor").checked };
+    $("#embossDialog").close();
+    await applyWorkerOperation("エンボス", "emboss", params);
+  });
+  $("#embossDialog").addEventListener("close", hidePreview);
+  $("#embossDialog").addEventListener("cancel", hidePreview);
+}
+
+function openEdgeEnhanceDialog() {
+  $("#edgeEnhanceRange").value = $("#edgeEnhanceNumber").value = 3;
+  beginPreview(360_000);
+  scheduleWorkerPreview("edgeEnhance", { level: 3 }, 90);
+  $("#edgeEnhanceDialog").showModal();
+}
+
+function setupEdgeEnhanceDialog() {
+  const render = () => scheduleWorkerPreview("edgeEnhance", { level: Number($("#edgeEnhanceNumber").value) }, 90);
+  bindRangeAndNumber("#edgeEnhanceRange", "#edgeEnhanceNumber", render);
+  $("#edgeEnhanceOk").addEventListener("click", async event => {
+    event.preventDefault();
+    clearTimeout(genericPreviewTimer);
+    const level = Number($("#edgeEnhanceNumber").value);
+    $("#edgeEnhanceDialog").close();
+    await applyWorkerOperation("エッジの強調", "edgeEnhance", { level });
+  });
+  $("#edgeEnhanceDialog").addEventListener("close", hidePreview);
+  $("#edgeEnhanceDialog").addEventListener("cancel", hidePreview);
+}
+
 function setupSaveDialog() {
   $("#saveQuality").addEventListener("input", event => {
     $("#saveQualityOutput").value = event.target.value;
@@ -950,6 +1081,11 @@ setupRgbDialog();
 setupHsvDialog();
 setupSharpenDialog();
 setupMosaicDialog();
+setupPosterizeDialog();
+setupSolarizeDialog();
+setupThresholdDialog();
+setupEmbossDialog();
+setupEdgeEnhanceDialog();
 setupTextDialog();
 setupNewDialog();
 setupSaveDialog();
