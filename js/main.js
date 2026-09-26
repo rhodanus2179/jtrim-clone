@@ -171,7 +171,9 @@ const selection = new SelectionController({
 });
 
 function setMessage(message) {
-  $("#statusMessage").textContent = message;
+  const node = $("#statusMessage");
+  node.textContent = message;
+  node.title = message;
 }
 
 async function fileToCanvas(file) {
