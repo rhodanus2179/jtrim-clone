@@ -141,6 +141,8 @@ JTrimの基本用途である「開く→切り抜く→縮小→保存」が成
 
 ## Milestone 8 — 高度コーデック
 
+**実装状況: 機能実装完了。ブラウザ横断・大画像の実機検証を残す。**
+
 - Codec Worker / lazy WASM loader
 - libjpeg-turbo WASM wrapper
 - JPEGロスレス回転 / 反転
@@ -156,7 +158,8 @@ JTrimの基本用途である「開く→切り抜く→縮小→保存」が成
 - JPEGロスレス変換でCanvas再エンコードを行わない
 - Progressive JPEGのSOF形式を検証できる
 - Interlaced PNGのIHDR interlace method=1を検証できる
-- 通常保存時はWASMをロードしない
+- 通常PNG / WebPはWASMをロードしない
+- JPEGはProgressive指定または元sampling維持が必要な場合だけWASMをlazy-loadする
 
 ## Milestone 9 — 互換性検証
 
