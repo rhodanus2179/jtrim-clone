@@ -64,13 +64,28 @@ jobs:
           printf '\n// Generated from libjpeg-turbo 3.2.0 by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/jpegtran-module.js"
           printf '\n// Generated from libjpeg-turbo 3.2.0 by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/cjpeg-module.js"
 
+          SPNG=/tmp/libjpeg-turbo-src/src/spng
+          emcc "$GITHUB_WORKSPACE/tools/wasm/png_wrapper.c" \
+            "$SPNG/spng.c" \
+            "$SPNG/zlib/adler32.c" "$SPNG/zlib/compress.c" "$SPNG/zlib/crc32.c" \
+            "$SPNG/zlib/deflate.c" "$SPNG/zlib/inffast.c" "$SPNG/zlib/inflate.c" \
+            "$SPNG/zlib/inftrees.c" "$SPNG/zlib/trees.c" "$SPNG/zlib/zutil.c" \
+            -I"$SPNG" -I"$SPNG/zlib" -DSPNG_STATIC -O3 \
+            -sSINGLE_FILE=1 -sMODULARIZE=1 -sEXPORT_ES6=1 \
+            -sENVIRONMENT=web,worker,node -sALLOW_MEMORY_GROWTH=1 \
+            -sEXPORTED_FUNCTIONS='["_malloc","_free","_jtrim_png_encode","_jtrim_png_output_ptr","_jtrim_png_output_size","_jtrim_png_free_output"]' \
+            -o "$GITHUB_WORKSPACE/js/codecs/generated/png-codec-module.js"
+          printf '\n// Generated from bundled libspng 0.7.4 + zlib by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/png-codec-module.js"
+
       - name: Copy third-party notices
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p third_party/libjpeg-turbo
+          mkdir -p third_party/libjpeg-turbo third_party/libspng third_party/zlib
           cp /tmp/libjpeg-turbo-src/LICENSE.md third_party/libjpeg-turbo/LICENSE.md
           cp /tmp/libjpeg-turbo-src/README.ijg third_party/libjpeg-turbo/README.ijg
+          cp /tmp/libjpeg-turbo-src/src/spng/LICENSE third_party/libspng/LICENSE
+          cp /tmp/libjpeg-turbo-src/src/spng/zlib/LICENSE third_party/zlib/LICENSE
 
       - name: Smoke-test generated jpegtran module
         shell: bash
@@ -131,12 +146,53 @@ jobs:
           im.verify()
           print("cjpeg progressive WASM smoke test passed")
           PY
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import createPngCodec from './js/codecs/generated/png-codec-module.js';
+          const width = 9, height = 7;
+          const rgba = new Uint8Array(width * height * 4);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const i = (y * width + x) * 4;
+              rgba[i] = (x * 23) & 255;
+              rgba[i + 1] = (y * 37) & 255;
+              rgba[i + 2] = ((x + y) * 19) & 255;
+              rgba[i + 3] = (x * 29 + y * 11) & 255;
+            }
+          }
+          const mod = await createPngCodec();
+          const ptr = mod._malloc(rgba.length);
+          mod.HEAPU8.set(rgba, ptr);
+          const rc = mod._jtrim_png_encode(ptr, rgba.length, width, height, 1, 6);
+          mod._free(ptr);
+          if (rc !== 0) throw new Error(`PNG codec failed with code ${rc}`);
+          const outPtr = mod._jtrim_png_output_ptr();
+          const outSize = mod._jtrim_png_output_size();
+          const out = mod.HEAPU8.slice(outPtr, outPtr + outSize);
+          mod._jtrim_png_free_output();
+          if (out.length < 60) throw new Error('PNG output is unexpectedly small');
+          fs.writeFileSync('/tmp/interlaced.png', out);
+          NODE
+          python - <<'PY'
+          from PIL import Image
+          raw = open("/tmp/interlaced.png", "rb").read()
+          assert raw[:8] == b"\x89PNG\r\n\x1a\n"
+          assert raw[28] == 1, f"IHDR interlace={raw[28]}"
+          im = Image.open("/tmp/interlaced.png").convert("RGBA")
+          assert im.size == (9, 7), im.size
+          expected = []
+          for y in range(7):
+              for x in range(9):
+                  expected.append(((x*23)&255, (y*37)&255, ((x+y)*19)&255, (x*29+y*11)&255))
+          assert list(im.getdata()) == expected
+          print("libspng Adam7 WASM smoke test passed")
+          PY
 
       - name: Commit generated codec
         shell: bash
         run: |
           set -euo pipefail
-          git add js/codecs/generated/jpegtran-module.js js/codecs/generated/cjpeg-module.js third_party/libjpeg-turbo/LICENSE.md third_party/libjpeg-turbo/README.ijg
+          git add js/codecs/generated/jpegtran-module.js js/codecs/generated/cjpeg-module.js js/codecs/generated/png-codec-module.js third_party/libjpeg-turbo/LICENSE.md third_party/libjpeg-turbo/README.ijg third_party/libspng/LICENSE third_party/zlib/LICENSE
           if git diff --cached --quiet; then
             echo "Generated codec is unchanged."
             exit 0
