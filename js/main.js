@@ -17,9 +17,12 @@ import { createZip } from "./io/zip.js";
 import {
   getFileSystemCapabilities,
   pickWorkspaceDirectory,
+  pickOutputDirectory,
   pickSaveFileHandle,
   ensureHandlePermission,
   writeBlobToFileHandle,
+  createFileInDirectory,
+  getOrCreateDirectory,
   getFileFromHandle,
   isLikelyImageName
 } from "./io/file-system-access.js";
@@ -54,7 +57,7 @@ let compositeSourceCanvas = null;
 let histogramResult = null;
 let showTransparency = false;
 let textureSourceCanvas = null;
-let batchFiles = [];
+let batchItems = [];
 let galleryItems = [];
 let galleryPendingAction = null;
 let slideshowIndex = 0;
@@ -2509,10 +2512,52 @@ function computeBatchTarget(width, height, targetWidth, targetHeight, keepAspect
   };
 }
 
+function batchItemsFromWorkspace() {
+  if (!folderWorkspace.active) return [];
+  return folderWorkspace.entries
+    .filter(entry => entry.kind === "file" && isLikelyImageName(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }))
+    .map(entry => ({
+      name: entry.name,
+      handle: entry.handle,
+      file: null
+    }));
+}
+
+function updateBatchSourceLabel() {
+  $("#batchFileCount").textContent = `${batchItems.length}ファイル`;
+  $("#batchStatus").textContent = batchItems.length
+    ? "設定を確認して変換を開始してください。"
+    : "ファイルを選択してください。";
+}
+
+function updateBatchOutputAvailability() {
+  const subfolderRadio = document.querySelector('input[name="batchOutputMode"][value="subfolder"]');
+  const folderRadio = document.querySelector('input[name="batchOutputMode"][value="folder"]');
+  const supported = fsCapabilities.directoryPicker;
+  subfolderRadio.disabled = !supported || !folderWorkspace.active;
+  folderRadio.disabled = !supported;
+
+  const selected = document.querySelector('input[name="batchOutputMode"]:checked');
+  if (selected?.disabled) {
+    document.querySelector('input[name="batchOutputMode"][value="zip"]').checked = true;
+  }
+
+  $("#batchOutputHint").textContent = !supported
+    ? "このブラウザでは直接フォルダ出力を利用できないため、ZIPで保存します。"
+    : folderWorkspace.active
+      ? `現在のフォルダ: ${folderWorkspace.pathLabel}。直接出力では書き込み時に許可を求めます。`
+      : "フォルダを開くと converted サブフォルダへ直接出力できます。任意の出力フォルダ選択は利用できます。";
+}
+
 function openBatchDialog() {
-  $("#batchFileCount").textContent = `${batchFiles.length}ファイル`;
+  $("#batchUseWorkspace").hidden = !folderWorkspace.active;
+  if (folderWorkspace.active && !batchItems.length) {
+    batchItems = batchItemsFromWorkspace();
+  }
+  updateBatchSourceLabel();
+  updateBatchOutputAvailability();
   $("#batchProgress").value = 0;
-  $("#batchStatus").textContent = batchFiles.length ? "設定を確認して変換を開始してください。" : "ファイルを選択してください。";
   $("#batchDialog").showModal();
 }
 
@@ -2563,19 +2608,92 @@ async function processBatchFile(file, options) {
   });
 }
 
+async function getBatchItemFile(item) {
+  if (item.file) return item.file;
+  if (!item.handle) return null;
+  item.file = await getFileFromHandle(item.handle);
+  return item.file;
+}
+
+async function fileExistsInDirectory(directoryHandle, name) {
+  try {
+    await directoryHandle.getFileHandle(name);
+    return true;
+  } catch (error) {
+    if (error?.name === "NotFoundError") return false;
+    throw error;
+  }
+}
+
+function nameWithSuffix(name, index) {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return `${name}_${index}`;
+  return `${name.slice(0, dot)}_${index}${name.slice(dot)}`;
+}
+
+async function resolveDirectOutputName(directoryHandle, desiredName, policy) {
+  const exists = await fileExistsInDirectory(directoryHandle, desiredName);
+  if (!exists || policy === "overwrite") return desiredName;
+  if (policy === "skip") return null;
+
+  for (let index = 2; index < 10000; index++) {
+    const candidate = nameWithSuffix(desiredName, index);
+    if (!(await fileExistsInDirectory(directoryHandle, candidate))) return candidate;
+  }
+  throw new Error(`${desiredName} の重複しない出力名を作成できませんでした。`);
+}
+
+async function resolveBatchOutputDirectory(mode) {
+  if (mode === "zip") return null;
+
+  if (mode === "subfolder") {
+    if (!folderWorkspace.active) throw new Error("現在のフォルダがありません。先にフォルダを開いてください。");
+    const name = $("#batchSubfolderName").value.trim();
+    if (!name || /[\\/:*?"<>|]/.test(name) || name === "." || name === "..") {
+      throw new Error("有効なサブフォルダ名を入力してください。");
+    }
+    return await getOrCreateDirectory(folderWorkspace.currentHandle, name);
+  }
+
+  if (mode === "folder") {
+    return await pickOutputDirectory({
+      id: "jtrim-output",
+      startIn: folderWorkspace.currentHandle || "pictures"
+    });
+  }
+
+  throw new Error("出力方法が不明です。");
+}
+
 function setupBatchDialog() {
   $("#batchChooseFiles").addEventListener("click", () => $("#batchFileInput").click());
+  $("#batchUseWorkspace").addEventListener("click", () => {
+    batchItems = batchItemsFromWorkspace();
+    updateBatchSourceLabel();
+  });
+
   $("#batchFileInput").addEventListener("change", event => {
-    batchFiles = [...(event.target.files || [])].filter(file => file.type.startsWith("image/"));
-    $("#batchFileCount").textContent = `${batchFiles.length}ファイル`;
-    $("#batchStatus").textContent = batchFiles.length ? "設定を確認して変換を開始してください。" : "画像ファイルがありません。";
+    batchItems = [...(event.target.files || [])]
+      .filter(file => file.type.startsWith("image/"))
+      .map(file => ({ name: file.name, file, handle: null }));
+    updateBatchSourceLabel();
     event.target.value = "";
   });
 
+  document.querySelectorAll('input[name="batchOutputMode"]').forEach(input => {
+    input.addEventListener("change", updateBatchOutputAvailability);
+  });
+
   $("#batchStart").addEventListener("click", async () => {
-    if (!batchFiles.length) {
-      $("#batchFileInput").click();
-      return;
+    if (!batchItems.length) {
+      if (folderWorkspace.active) {
+        batchItems = batchItemsFromWorkspace();
+        updateBatchSourceLabel();
+      }
+      if (!batchItems.length) {
+        $("#batchFileInput").click();
+        return;
+      }
     }
 
     const options = {
@@ -2591,32 +2709,75 @@ function setupBatchDialog() {
       brightness: Number($("#batchBrightness").value) || 0,
       contrast: Number($("#batchContrast").value) || 0
     };
+    const outputMode = document.querySelector('input[name="batchOutputMode"]:checked')?.value || "zip";
+    const conflictPolicy = $("#batchConflictPolicy").value;
+
+    let outputDirectory = null;
+    try {
+      outputDirectory = await resolveBatchOutputDirectory(outputMode);
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        $("#batchStatus").textContent = "出力フォルダの選択をキャンセルしました。";
+        return;
+      }
+      console.error(error);
+      alert(error.message || error);
+      return;
+    }
 
     const startButton = $("#batchStart");
     startButton.disabled = true;
-    const entries = [];
-    const usedNames = new Set();
+    const zipEntries = [];
+    const zipUsedNames = new Set();
+    let completed = 0;
+    let skipped = 0;
 
     try {
-      for (let i = 0; i < batchFiles.length; i++) {
-        const file = batchFiles[i];
-        $("#batchStatus").textContent = `${i + 1} / ${batchFiles.length}: ${file.name} を変換中…`;
-        $("#batchProgress").value = i / batchFiles.length * 90;
+      for (let i = 0; i < batchItems.length; i++) {
+        const item = batchItems[i];
+        $("#batchStatus").textContent = `${i + 1} / ${batchItems.length}: ${item.name} を変換中…`;
+        $("#batchProgress").value = i / batchItems.length * (outputMode === "zip" ? 90 : 100);
+
+        const file = await getBatchItemFile(item);
+        if (!file) throw new Error(`${item.name} を読み込めませんでした。`);
         const blob = await processBatchFile(file, options);
-        entries.push({
-          name: uniqueOutputName(file.name, options.type, usedNames),
-          blob
-        });
+        const desiredName = uniqueOutputName(item.name, options.type, outputMode === "zip" ? zipUsedNames : new Set());
+
+        if (outputMode === "zip") {
+          zipEntries.push({ name: desiredName, blob });
+        } else {
+          const outputName = await resolveDirectOutputName(outputDirectory, desiredName, conflictPolicy);
+          if (outputName == null) {
+            skipped++;
+          } else {
+            await createFileInDirectory(outputDirectory, outputName, blob, {
+              overwrite: conflictPolicy === "overwrite"
+            });
+            completed++;
+          }
+        }
+
+        // Release File references obtained from handles between iterations.
+        if (item.handle) item.file = null;
         await new Promise(resolve => setTimeout(resolve, 0));
       }
 
-      $("#batchStatus").textContent = "ZIPを作成しています…";
-      $("#batchProgress").value = 94;
-      const zip = await createZip(entries);
-      $("#batchProgress").value = 100;
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      downloadBlob(zip, `jtrim-batch-${stamp}`, "application/zip");
-      $("#batchStatus").textContent = `${entries.length}ファイルの変換が完了しました。ZIP: ${(zip.size / 1024 / 1024).toFixed(1)}MB`;
+      if (outputMode === "zip") {
+        $("#batchStatus").textContent = "ZIPを作成しています…";
+        $("#batchProgress").value = 94;
+        const zip = await createZip(zipEntries);
+        $("#batchProgress").value = 100;
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        downloadBlob(zip, `jtrim-batch-${stamp}`, "application/zip");
+        $("#batchStatus").textContent = `${zipEntries.length}ファイルの変換が完了しました。ZIP: ${(zip.size / 1024 / 1024).toFixed(1)}MB`;
+      } else {
+        $("#batchProgress").value = 100;
+        $("#batchStatus").textContent = `${completed}ファイルをフォルダへ保存しました${skipped ? `（${skipped}件スキップ）` : ""}。`;
+        if (outputMode === "subfolder") {
+          // New output folder should become visible without changing the current location.
+          await folderWorkspace.refresh().catch(() => {});
+        }
+      }
     } catch (error) {
       console.error(error);
       $("#batchStatus").textContent = `一括変換に失敗しました: ${error.message || error}`;
