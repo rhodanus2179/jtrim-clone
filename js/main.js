@@ -1622,29 +1622,190 @@ function setupEdgeEnhanceDialog() {
 }
 
 
+function normalizeFillColor(value, fallback) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : fallback;
+}
+
+function getFillOptions() {
+  const raw = readPreference("fill-options", DEFAULT_FILL_OPTIONS);
+  return {
+    leftColor: normalizeFillColor(raw.leftColor, DEFAULT_FILL_OPTIONS.leftColor),
+    rightColor: normalizeFillColor(raw.rightColor, DEFAULT_FILL_OPTIONS.rightColor),
+    tolerance: Math.max(0, Math.min(100, Number(raw.tolerance) || 0)),
+    opacity: Math.max(0, Math.min(100, Number(raw.opacity) || 0))
+  };
+}
+
+function currentFillOptions() {
+  return {
+    leftColor: normalizeFillColor($("#fillLeftColor").value, DEFAULT_FILL_OPTIONS.leftColor),
+    rightColor: normalizeFillColor($("#fillRightColor").value, DEFAULT_FILL_OPTIONS.rightColor),
+    tolerance: Math.max(0, Math.min(100, Number($("#fillToleranceNumber").value) || 0)),
+    opacity: Math.max(0, Math.min(100, Number($("#fillOpacityNumber").value) || 0))
+  };
+}
+
+function persistFillOptions() {
+  const options = currentFillOptions();
+  writePreference("fill-options", options);
+  $("#fillLeftColorHex").textContent = options.leftColor.toUpperCase();
+  $("#fillRightColorHex").textContent = options.rightColor.toUpperCase();
+  return options;
+}
+
+function setFillEyedropper(active) {
+  fillEyedropperActive = Boolean(active);
+  const button = $("#fillEyedropper");
+  button.setAttribute("aria-pressed", String(fillEyedropperActive));
+  button.classList.toggle("active", fillEyedropperActive);
+  button.textContent = fillEyedropperActive ? "スポイト ON" : "スポイト";
+  $("#fillModeStatus").textContent = fillEyedropperActive
+    ? "スポイトモード：左／右クリックで対応色を取得"
+    : "塗りつぶしモード：左／右クリックで対応色を使用";
+  overlayCanvas.classList.toggle("eyedropper-tool-active", fillToolActive && fillEyedropperActive);
+}
+
+function fillPointInsideSelection(x, y) {
+  const selected = state.selection;
+  if (!selected) return true;
+  const x0 = Math.max(0, Math.round(selected.x));
+  const y0 = Math.max(0, Math.round(selected.y));
+  const x1 = Math.min(canvas.width, Math.round(selected.x + selected.width));
+  const y1 = Math.min(canvas.height, Math.round(selected.y + selected.height));
+  return x >= x0 && x < x1 && y >= y0 && y < y1;
+}
+
 function openFillDialog() {
-  const s = state.selection;
-  $("#fillX").value = Math.round(s?.x ?? 0);
-  $("#fillY").value = Math.round(s?.y ?? 0);
-  $("#fillToleranceRange").value = $("#fillToleranceNumber").value = 20;
-  $("#fillOpacityRange").value = $("#fillOpacityNumber").value = 100;
-  $("#fillDialog").showModal();
+  if (!state.document) return;
+
+  const options = getFillOptions();
+  $("#fillLeftColor").value = options.leftColor;
+  $("#fillRightColor").value = options.rightColor;
+  $("#fillToleranceRange").value = $("#fillToleranceNumber").value = options.tolerance;
+  $("#fillOpacityRange").value = $("#fillOpacityNumber").value = options.opacity;
+  persistFillOptions();
+
+  fillToolActive = true;
+  setFillEyedropper(false);
+  overlayCanvas.classList.add("fill-tool-active");
+
+  const dialog = $("#fillDialog");
+  if (!dialog.open) dialog.show();
+  dialog.querySelector(".dialog-head")?.focus?.();
+  setMessage("塗りつぶし：画像を左／右クリックしてください");
+}
+
+async function performFillToolAction(x, y, button) {
+  if (!fillToolActive || !state.document || fillOperationRunning) return;
+
+  const side = button === 2 ? "右" : "左";
+  const colorInput = button === 2 ? $("#fillRightColor") : $("#fillLeftColor");
+
+  if (fillEyedropperActive) {
+    const rgba = imageCtx.getImageData(x, y, 1, 1).data;
+    const color = rgbToHex(rgba[0], rgba[1], rgba[2]);
+    colorInput.value = color;
+    persistFillOptions();
+    updateStatusPixelColor(rgba);
+    setMessage(`${side}クリック色に ${color} を取得しました`);
+    return;
+  }
+
+  if (!fillPointInsideSelection(x, y)) {
+    setMessage("選択範囲外では塗りつぶしできません");
+    return;
+  }
+
+  const options = persistFillOptions();
+  const color = button === 2 ? options.rightColor : options.leftColor;
+
+  fillOperationRunning = true;
+  state.setBusy(true);
+  $("#fillModeStatus").textContent = "塗りつぶし処理中…";
+  setMessage(`塗りつぶしています… (${x}, ${y})`);
+
+  try {
+    await history.snapshot(canvas, "塗りつぶし");
+    const source = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = await imageWorker.run("floodFill", source, {
+      x,
+      y,
+      color,
+      tolerance: options.tolerance,
+      opacity: options.opacity / 100,
+      selection: state.selection ? { ...state.selection } : null
+    });
+    imageCtx.putImageData(result, 0, 0);
+    markPixelModified();
+    syncLayers();
+    setMessage(
+      `${side}クリックで塗りつぶしました (${x}, ${y}) / 許容範囲 ${options.tolerance}%`
+    );
+  } catch (error) {
+    console.error(error);
+    setMessage("塗りつぶしに失敗しました");
+    alert(`塗りつぶしに失敗しました。\n${error.message || error}`);
+  } finally {
+    fillOperationRunning = false;
+    state.setBusy(false);
+    setFillEyedropper(fillEyedropperActive);
+    refreshUI();
+  }
 }
 
 function setupFillDialog() {
-  bindRangeAndNumber("#fillToleranceRange", "#fillToleranceNumber", () => {});
-  bindRangeAndNumber("#fillOpacityRange", "#fillOpacityNumber", () => {});
-  $("#fillOk").addEventListener("click", async event => {
+  const dialog = $("#fillDialog");
+
+  const saveSettings = () => persistFillOptions();
+  bindRangeAndNumber("#fillToleranceRange", "#fillToleranceNumber", saveSettings);
+  bindRangeAndNumber("#fillOpacityRange", "#fillOpacityNumber", saveSettings);
+  $("#fillLeftColor").addEventListener("input", saveSettings);
+  $("#fillRightColor").addEventListener("input", saveSettings);
+
+  $("#fillEyedropper").addEventListener("click", () => {
+    setFillEyedropper(!fillEyedropperActive);
+  });
+
+  overlayCanvas.addEventListener("pointerdown", event => {
+    if (!fillToolActive || !dialog.open || !state.document) return;
+    if (event.button !== 0 && event.button !== 2) return;
+
     event.preventDefault();
-    const params = {
-      x: Number($("#fillX").value),
-      y: Number($("#fillY").value),
-      color: $("#fillColor").value,
-      tolerance: Number($("#fillToleranceNumber").value),
-      opacity: Number($("#fillOpacityNumber").value) / 100
-    };
-    $("#fillDialog").close();
-    await applyWorkerOperation("塗りつぶし", "floodFill", params);
+    event.stopImmediatePropagation();
+
+    if (fillOperationRunning) {
+      setMessage("塗りつぶし処理の完了を待っています…");
+      return;
+    }
+
+    const point = selection.pointFromEvent(event);
+    const x = Math.max(0, Math.min(canvas.width - 1, Math.floor(point.x)));
+    const y = Math.max(0, Math.min(canvas.height - 1, Math.floor(point.y)));
+    void performFillToolAction(x, y, event.button);
+  }, { capture: true });
+
+  overlayCanvas.addEventListener("contextmenu", event => {
+    if (!fillToolActive || !dialog.open) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, { capture: true });
+
+  document.addEventListener("keydown", event => {
+    if (!fillToolActive || event.key !== "Escape" || !dialog.open) return;
+    const otherDialogOpen = [...document.querySelectorAll("dialog[open]")]
+      .some(openDialog => openDialog !== dialog);
+    if (otherDialogOpen) return;
+    event.preventDefault();
+    dialog.close();
+  });
+
+  dialog.addEventListener("close", () => {
+    persistFillOptions();
+    fillToolActive = false;
+    fillOperationRunning = false;
+    setFillEyedropper(false);
+    overlayCanvas.classList.remove("fill-tool-active", "eyedropper-tool-active");
+    if (state.document) setMessage("塗りつぶしを終了しました");
   });
 }
 
