@@ -34,6 +34,15 @@ import {
   isLikelyImageName
 } from "./io/file-system-access.js";
 import { WorkspaceController } from "./workspace/workspace-controller.js";
+import { readPreference, writePreference } from "./preferences.js";
+import {
+  DEFAULT_PRINT_SETTINGS,
+  normalizePrintSettings,
+  pageSizeMm,
+  resolvedOrientation,
+  printCss
+} from "./io/print.js";
+import { parseJpegInfo } from "./io/jpeg-info.js";
 import {
   recentHandleStoreAvailable,
   listRecentDirectories,
@@ -86,6 +95,18 @@ let slideshowOrder = [];
 let slideshowCursor = 0;
 let galleryLoadMoreObserver = null;
 let renderedGalleryCount = 0;
+let printPreviewUrl = null;
+let printOutputUrl = null;
+let reopenPrintPreviewAfterSettings = false;
+
+const DEFAULT_SAVE_OPTIONS = Object.freeze({
+  jpegMode: "quality",
+  jpegQuality: 92,
+  targetKb: 500,
+  preserveExif: true,
+  confirmExif: false,
+  webpQuality: 92
+});
 
 const selection = new SelectionController({
   canvas,
@@ -338,6 +359,10 @@ function setupCommands() {
       run: () => fileInput.click(),
       enabled: () => !state.busy
     })
+    .register("file.reload", {
+      run: reloadCurrentDocument,
+      enabled: () => documentReady() && Boolean(state.document?.fileHandle || state.document?.sourceFile)
+    })
     .register("file.openFolder", {
       run: openWorkspaceFolder,
       enabled: () => !state.busy && fsCapabilities.directoryPicker
@@ -352,6 +377,22 @@ function setupCommands() {
     })
     .register("file.save", {
       run: openSaveDialog,
+      enabled: documentReady
+    })
+    .register("file.saveOptions", {
+      run: openSaveOptionsDialog,
+      enabled: () => !state.busy
+    })
+    .register("file.printSetup", {
+      run: openPrintSettingsDialog,
+      enabled: documentReady
+    })
+    .register("file.print", {
+      run: printCurrentDocument,
+      enabled: documentReady
+    })
+    .register("file.printPreview", {
+      run: openPrintPreview,
       enabled: documentReady
     })
     .register("file.thumbnails", {
@@ -451,6 +492,18 @@ function setupCommands() {
       enabled: () => documentReady() && Boolean(state.selection),
       run: () => state.clearSelection()
     })
+    .register("edit.clearHistory", {
+      enabled: () => !state.busy && (history.canUndo || history.canRedo),
+      run: () => {
+        history.clear();
+        setMessage("アンドゥ／リドゥ履歴をクリアしました");
+        refreshUI();
+      }
+    })
+    .register("edit.clearClipboard", {
+      enabled: () => !state.busy,
+      run: clearApplicationClipboard
+    })
     .register("view.fit", { enabled: documentReady, run: zoomFit })
     .register("view.actual", { enabled: documentReady, run: () => applyZoom(1) })
     .register("view.zoomIn", { enabled: documentReady, run: () => zoomStep(1) })
@@ -530,6 +583,10 @@ function setupCommands() {
     .register("image.densityMax", {
       enabled: documentReady,
       run: () => applyWorkerOperation("最大濃度抽出", "densityExtract", { mode: "max" })
+    })
+    .register("image.jpegInfo", {
+      enabled: documentReady,
+      run: openJpegInfoDialog
     })
     .register("image.transparentColor", {
       enabled: documentReady,
