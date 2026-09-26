@@ -12,6 +12,21 @@ function cloneImageData(source) {
   return new ImageData(new Uint8ClampedArray(source.data), source.width, source.height);
 }
 
+export function grayscaleImageData(source, selection = null) {
+  const out = cloneImageData(source);
+  const d = out.data;
+  const { x0, y0, x1, y1 } = regionBounds(source, selection);
+  for (let y = y0; y < y1; y++) {
+    let i = (y * source.width + x0) * 4;
+    const end = (y * source.width + x1) * 4;
+    for (; i < end; i += 4) {
+      const value = clamp255(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      d[i] = d[i + 1] = d[i + 2] = value;
+    }
+  }
+  return out;
+}
+
 export function brightnessContrastImageData(source, brightness = 0, contrast = 0, selection = null) {
   const out = cloneImageData(source);
   const d = out.data;
