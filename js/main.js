@@ -14,11 +14,20 @@ import {
 } from "./engine/operations.js";
 import { ImageWorkerClient } from "./worker/client.js";
 import { createZip } from "./io/zip.js";
+import {
+  getFileSystemCapabilities,
+  pickWorkspaceDirectory,
+  getFileFromHandle,
+  isLikelyImageName
+} from "./io/file-system-access.js";
+import { WorkspaceController } from "./workspace/workspace-controller.js";
 
 const state = new AppState();
 const history = new HistoryManager(16);
 const commands = new CommandRegistry();
 const imageWorker = new ImageWorkerClient();
+const folderWorkspace = new WorkspaceController();
+const fsCapabilities = getFileSystemCapabilities();
 
 const $ = selector => document.querySelector(selector);
 const canvas = $("#imageCanvas");
@@ -47,6 +56,9 @@ let galleryItems = [];
 let galleryPendingAction = null;
 let slideshowIndex = 0;
 let slideshowTimer = null;
+let selectedGalleryIndex = -1;
+let thumbnailObserver = null;
+let slideshowGeneration = 0;
 
 const selection = new SelectionController({
   canvas,
@@ -231,7 +243,7 @@ async function commitPreview(label) {
   setMessage(`${label}を適用しました`);
 }
 
-async function loadFile(file) {
+async function loadFile(file, sourceContext = null) {
   if (!file || !file.type.startsWith("image/")) {
     setMessage("画像ファイルを選択してください");
     return;
@@ -241,6 +253,20 @@ async function loadFile(file) {
     setMessage("画像を読み込んでいます…");
     hidePreview();
     const meta = await decodeFileToCanvas(file, canvas);
+    if (sourceContext?.fileHandle) {
+      meta.fileHandle = sourceContext.fileHandle;
+      meta.parentDirectoryHandle = sourceContext.parentDirectoryHandle || null;
+      meta.workspaceRelativePath = sourceContext.workspaceRelativePath || file.name;
+      meta.sourceSnapshot = {
+        size: file.size,
+        lastModified: file.lastModified
+      };
+    } else {
+      meta.fileHandle = null;
+      meta.parentDirectoryHandle = null;
+      meta.workspaceRelativePath = null;
+      meta.sourceSnapshot = null;
+    }
     history.clear();
     state.setDocument(meta);
     showDocument();
@@ -287,6 +313,10 @@ function setupCommands() {
     .register("file.open", {
       run: () => fileInput.click(),
       enabled: () => !state.busy
+    })
+    .register("file.openFolder", {
+      run: openWorkspaceFolder,
+      enabled: () => !state.busy && fsCapabilities.directoryPicker
     })
     .register("file.save", {
       run: openSaveDialog,
@@ -2590,87 +2620,385 @@ function setupBatchDialog() {
   });
 }
 
+function releaseGalleryUrls() {
+  thumbnailObserver?.disconnect();
+  thumbnailObserver = null;
+  for (const item of galleryItems) {
+    if (item.url) URL.revokeObjectURL(item.url);
+    item.url = null;
+  }
+}
+
 function clearGallery() {
   stopSlideshow();
-  for (const item of galleryItems) URL.revokeObjectURL(item.url);
+  releaseGalleryUrls();
   galleryItems = [];
   slideshowIndex = 0;
+  selectedGalleryIndex = -1;
 }
 
 function setGalleryFiles(files) {
   clearGallery();
+  folderWorkspace.useLegacyMode();
   galleryItems = [...files]
     .filter(file => file.type.startsWith("image/"))
     .sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }))
-    .map(file => ({ file, url: URL.createObjectURL(file) }));
+    .map(file => ({
+      kind: "file",
+      name: file.name,
+      file,
+      handle: null,
+      url: URL.createObjectURL(file),
+      size: file.size,
+      lastModified: file.lastModified,
+      mimeType: file.type
+    }));
   slideshowIndex = 0;
+  selectedGalleryIndex = -1;
+}
+
+async function openWorkspaceFolder() {
+  if (!fsCapabilities.directoryPicker) {
+    alert("このブラウザではフォルダ直接アクセスを利用できません。複数ファイル選択をご利用ください。");
+    return;
+  }
+
+  try {
+    const handle = await pickWorkspaceDirectory({
+      mode: "read",
+      id: "jtrim-workspace",
+      startIn: "pictures"
+    });
+    state.setBusy(true);
+    setMessage(`${handle.name} を読み込んでいます…`);
+    await folderWorkspace.openRoot(handle);
+    await rebuildWorkspaceGallery();
+    openThumbnails();
+    setMessage(`${handle.name} をフォルダとして開きました`);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      setMessage("フォルダ選択をキャンセルしました");
+      return;
+    }
+    console.error(error);
+    alert(`フォルダを開けませんでした。\n${error.message || error}`);
+    setMessage("フォルダを開けませんでした");
+  } finally {
+    state.setBusy(false);
+    refreshUI();
+  }
+}
+
+async function rebuildWorkspaceGallery({ render = true } = {}) {
+  releaseGalleryUrls();
+  const entries = await folderWorkspace.visibleEntries(isLikelyImageName);
+  galleryItems = entries.map(entry => ({
+    ...entry,
+    file: null,
+    url: null
+  }));
+  selectedGalleryIndex = -1;
+  slideshowIndex = 0;
+  renderWorkspaceChrome();
+  if (render && $("#thumbnailDialog").open) await renderThumbnails();
+}
+
+function renderWorkspaceChrome() {
+  const active = folderWorkspace.active;
+  $("#galleryModeLabel").textContent = active
+    ? `フォルダモード — ${folderWorkspace.pathLabel}`
+    : "複数ファイルモード";
+  $("#workspaceBrowserControls").hidden = !active;
+  $("#galleryRefresh").hidden = !active;
+  $("#galleryOpenFolder").disabled = !fsCapabilities.directoryPicker;
+  $("#galleryOpenFolder").title = fsCapabilities.directoryPicker
+    ? "フォルダを選択して開きます"
+    : "このブラウザはFile System Access APIに対応していません";
+  $("#workspacePermissionStatus").textContent = active
+    ? `読み取り権限: ${folderWorkspace.permission.read === "granted" ? "許可済み" : folderWorkspace.permission.read}`
+    : "";
+  renderWorkspaceBreadcrumbs();
+}
+
+function renderWorkspaceBreadcrumbs() {
+  const nav = $("#workspaceBreadcrumbs");
+  nav.replaceChildren();
+  if (!folderWorkspace.active) return;
+
+  folderWorkspace.breadcrumbs.forEach((crumb, index) => {
+    if (index > 0) {
+      const sep = document.createElement("span");
+      sep.className = "breadcrumb-separator";
+      sep.textContent = "›";
+      nav.append(sep);
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = crumb.name;
+    button.disabled = index === folderWorkspace.breadcrumbs.length - 1;
+    button.addEventListener("click", async () => {
+      try {
+        setMessage(`${crumb.name} を開いています…`);
+        await folderWorkspace.navigateToBreadcrumb(index);
+        await rebuildWorkspaceGallery();
+        setMessage(folderWorkspace.pathLabel);
+      } catch (error) {
+        console.error(error);
+        setMessage("フォルダを移動できませんでした");
+      }
+    });
+    nav.append(button);
+  });
+}
+
+async function ensureGalleryFile(item) {
+  if (!item || item.kind !== "file") return null;
+  if (item.file) return item.file;
+  if (!item.handle) return null;
+  const file = await getFileFromHandle(item.handle);
+  item.file = file;
+  item.size = file.size;
+  item.lastModified = file.lastModified;
+  item.mimeType = file.type;
+  return file;
+}
+
+async function ensureGalleryUrl(item) {
+  if (!item || item.kind !== "file") return null;
+  if (item.url) return item.url;
+  if (!isLikelyImageName(item.name)) return null;
+  const file = await ensureGalleryFile(item);
+  if (!file?.type?.startsWith("image/")) return null;
+  item.url = URL.createObjectURL(file);
+  return item.url;
+}
+
+function workspaceRelativePathFor(item) {
+  return [...folderWorkspace.breadcrumbs.map(crumb => crumb.name), item.name].join("/");
+}
+
+async function openGalleryItem(item) {
+  if (!item) return;
+  if (item.kind === "directory") {
+    try {
+      setMessage(`${item.name} を開いています…`);
+      await folderWorkspace.enterDirectory(item);
+      await rebuildWorkspaceGallery();
+      setMessage(folderWorkspace.pathLabel);
+    } catch (error) {
+      console.error(error);
+      alert(`フォルダを開けませんでした。\n${error.message || error}`);
+    }
+    return;
+  }
+
+  if (!isLikelyImageName(item.name)) {
+    setMessage("このファイルは画像として開けません");
+    return;
+  }
+
+  const file = await ensureGalleryFile(item);
+  if (!file?.type?.startsWith("image/")) {
+    setMessage("このファイルはブラウザで画像として認識されませんでした");
+    return;
+  }
+
+  $("#thumbnailDialog").close();
+  await loadFile(file, item.handle ? {
+    fileHandle: item.handle,
+    parentDirectoryHandle: folderWorkspace.currentHandle,
+    workspaceRelativePath: workspaceRelativePathFor(item)
+  } : null);
+}
+
+function selectGalleryItem(index) {
+  selectedGalleryIndex = index;
+  for (const [i, node] of [...$("#thumbnailGrid").querySelectorAll(".thumbnail-item")].entries()) {
+    node.classList.toggle("selected", i === index);
+  }
+}
+
+function formatGalleryMeta(item) {
+  if (item.kind !== "file") return "フォルダ";
+  const parts = [];
+  if (item.size != null) {
+    const size = item.size < 1024 * 1024
+      ? `${(item.size / 1024).toFixed(0)} KB`
+      : `${(item.size / 1024 / 1024).toFixed(1)} MB`;
+    parts.push(size);
+  }
+  if (item.lastModified) {
+    parts.push(new Date(item.lastModified).toLocaleDateString("ja-JP"));
+  }
+  return parts.join(" · ");
+}
+
+function createThumbnailObserver() {
+  thumbnailObserver?.disconnect();
+  if (typeof IntersectionObserver === "undefined") return null;
+  thumbnailObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      thumbnailObserver.unobserve(entry.target);
+      const index = Number(entry.target.dataset.index);
+      void loadThumbnail(index, entry.target);
+    }
+  }, {
+    root: $("#thumbnailGrid"),
+    rootMargin: "320px"
+  });
+  return thumbnailObserver;
+}
+
+async function loadThumbnail(index, button) {
+  const item = galleryItems[index];
+  if (!item || item.kind !== "file" || !isLikelyImageName(item.name)) return;
+  try {
+    const url = await ensureGalleryUrl(item);
+    if (!url || !button.isConnected || galleryItems[index] !== item) return;
+    const placeholder = button.querySelector(".thumbnail-loading");
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = item.name;
+    img.decoding = "async";
+    placeholder?.replaceWith(img);
+    const meta = button.querySelector(".thumbnail-meta");
+    if (meta) meta.textContent = formatGalleryMeta(item);
+  } catch (error) {
+    const placeholder = button.querySelector(".thumbnail-loading");
+    if (placeholder) placeholder.textContent = "読込失敗";
+  }
+}
+
+async function renderThumbnails() {
+  const grid = $("#thumbnailGrid");
+  grid.replaceChildren();
+  renderWorkspaceChrome();
+
+  if (folderWorkspace.active) {
+    $("#galleryCount").textContent = `${galleryItems.filter(item => item.kind === "file").length}ファイル / ${galleryItems.filter(item => item.kind === "directory").length}フォルダ`;
+  } else {
+    $("#galleryCount").textContent = `${galleryItems.length}ファイル`;
+  }
+
+  const observer = createThumbnailObserver();
+
+  galleryItems.forEach((item, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `thumbnail-item${item.kind === "directory" ? " directory" : ""}`;
+    button.title = item.name;
+    button.dataset.index = String(index);
+
+    let preview;
+    if (item.kind === "directory") {
+      preview = document.createElement("div");
+      preview.className = "thumbnail-folder-icon";
+      preview.textContent = "📁";
+    } else if (isLikelyImageName(item.name)) {
+      preview = document.createElement("div");
+      preview.className = "thumbnail-loading";
+      preview.textContent = "読込待ち";
+    } else {
+      preview = document.createElement("div");
+      preview.className = "thumbnail-folder-icon";
+      preview.textContent = "📄";
+    }
+
+    const text = document.createElement("div");
+    text.className = "thumbnail-text";
+    const name = document.createElement("span");
+    name.textContent = item.name;
+    const meta = document.createElement("small");
+    meta.className = "thumbnail-meta";
+    meta.textContent = formatGalleryMeta(item);
+    text.append(name, meta);
+
+    button.append(preview, text);
+    button.addEventListener("click", () => selectGalleryItem(index));
+    button.addEventListener("dblclick", async () => {
+      if (item.kind === "file") {
+        const slides = getSlideshowItems();
+        const slideIndex = slides.indexOf(item);
+        if (slideIndex >= 0) slideshowIndex = slideIndex;
+      }
+      await openGalleryItem(item);
+    });
+    grid.append(button);
+
+    if (item.kind === "file" && isLikelyImageName(item.name)) {
+      if (observer) observer.observe(button);
+      else void loadThumbnail(index, button);
+    }
+  });
+
+  if (galleryItems.length) selectGalleryItem(0);
+}
+
+async function openThumbnails() {
+  if (!$("#thumbnailDialog").open) $("#thumbnailDialog").showModal();
+  await renderThumbnails();
 }
 
 function requestGallery(action) {
+  if (folderWorkspace.active) {
+    if (action === "slideshow") openSlideshow();
+    else void openThumbnails();
+    return;
+  }
+
   if (!galleryItems.length) {
+    if (action === "thumbnails" && fsCapabilities.directoryPicker) {
+      void openThumbnails();
+      return;
+    }
     galleryPendingAction = action;
     $("#galleryFileInput").click();
     return;
   }
   if (action === "slideshow") openSlideshow();
-  else openThumbnails();
+  else void openThumbnails();
 }
 
-function renderThumbnails() {
-  const grid = $("#thumbnailGrid");
-  grid.replaceChildren();
-  $("#galleryCount").textContent = `${galleryItems.length}ファイル`;
-
-  for (const [index, item] of galleryItems.entries()) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "thumbnail-item";
-    button.title = item.file.name;
-
-    const img = document.createElement("img");
-    img.src = item.url;
-    img.alt = item.file.name;
-    img.loading = "lazy";
-    img.decoding = "async";
-
-    const name = document.createElement("span");
-    name.textContent = item.file.name;
-
-    button.append(img, name);
-    button.addEventListener("click", async () => {
-      $("#thumbnailDialog").close();
-      await loadFile(item.file);
-    });
-    button.addEventListener("dblclick", () => {
-      slideshowIndex = index;
-      $("#thumbnailDialog").close();
-      openSlideshow();
-    });
-    grid.append(button);
-  }
+function getSlideshowItems() {
+  return galleryItems.filter(item =>
+    item.kind === "file" &&
+    (item.file?.type?.startsWith("image/") || isLikelyImageName(item.name))
+  );
 }
 
-function openThumbnails() {
-  renderThumbnails();
-  $("#thumbnailDialog").showModal();
-}
-
-function showSlide(index) {
-  if (!galleryItems.length) {
+async function showSlide(index) {
+  const slides = getSlideshowItems();
+  if (!slides.length) {
     $("#slideshowImage").hidden = true;
     $("#slideshowEmpty").hidden = false;
     $("#slideshowName").textContent = "—";
     $("#slideshowPosition").textContent = "0 / 0";
     return;
   }
-  slideshowIndex = (index + galleryItems.length) % galleryItems.length;
-  const item = galleryItems[slideshowIndex];
-  $("#slideshowImage").hidden = false;
-  $("#slideshowEmpty").hidden = true;
-  $("#slideshowImage").src = item.url;
-  $("#slideshowImage").alt = item.file.name;
-  $("#slideshowName").textContent = item.file.name;
-  $("#slideshowPosition").textContent = `${slideshowIndex + 1} / ${galleryItems.length}`;
+
+  slideshowIndex = (index + slides.length) % slides.length;
+  const item = slides[slideshowIndex];
+  const generation = ++slideshowGeneration;
+  $("#slideshowEmpty").hidden = false;
+  $("#slideshowEmpty").textContent = "読み込み中…";
+
+  try {
+    const url = await ensureGalleryUrl(item);
+    if (generation !== slideshowGeneration) return;
+    if (!url) throw new Error("画像URLを生成できませんでした");
+    $("#slideshowImage").hidden = false;
+    $("#slideshowEmpty").hidden = true;
+    $("#slideshowImage").src = url;
+    $("#slideshowImage").alt = item.name;
+    $("#slideshowName").textContent = item.name;
+    $("#slideshowPosition").textContent = `${slideshowIndex + 1} / ${slides.length}`;
+  } catch {
+    if (generation !== slideshowGeneration) return;
+    $("#slideshowImage").hidden = true;
+    $("#slideshowEmpty").hidden = false;
+    $("#slideshowEmpty").textContent = "画像を読み込めませんでした。";
+  }
 }
 
 function stopSlideshow() {
@@ -2683,7 +3011,7 @@ function stopSlideshow() {
 function startSlideshow() {
   stopSlideshow();
   const seconds = Math.max(1, Number($("#slideshowInterval").value) || 3);
-  slideshowTimer = setInterval(() => showSlide(slideshowIndex + 1), seconds * 1000);
+  slideshowTimer = setInterval(() => void showSlide(slideshowIndex + 1), seconds * 1000);
   $("#slideshowPlay").textContent = "⏸ 停止";
 }
 
@@ -2693,11 +3021,12 @@ function toggleSlideshow() {
 }
 
 function openSlideshow() {
-  showSlide(slideshowIndex);
+  void showSlide(slideshowIndex);
   if (!$("#slideshowDialog").open) $("#slideshowDialog").showModal();
 }
 
 function setupGallery() {
+  $("#galleryOpenFolder").disabled = !fsCapabilities.directoryPicker;
   $("#galleryFileInput").addEventListener("change", event => {
     const files = event.target.files || [];
     setGalleryFiles(files);
@@ -2705,19 +3034,67 @@ function setupGallery() {
     const action = galleryPendingAction || "thumbnails";
     galleryPendingAction = null;
     if (action === "slideshow") openSlideshow();
-    else openThumbnails();
+    else void openThumbnails();
   });
 
+  $("#galleryOpenFolder").addEventListener("click", () => void openWorkspaceFolder());
   $("#galleryChooseFiles").addEventListener("click", () => {
     galleryPendingAction = "thumbnails";
     $("#galleryFileInput").click();
   });
+  $("#galleryRefresh").addEventListener("click", async () => {
+    if (!folderWorkspace.active) return;
+    try {
+      setMessage("フォルダを更新しています…");
+      await folderWorkspace.refresh();
+      await rebuildWorkspaceGallery();
+      setMessage(folderWorkspace.pathLabel);
+    } catch (error) {
+      console.error(error);
+      setMessage("フォルダを更新できませんでした");
+    }
+  });
+
+  let searchTimer = null;
+  $("#gallerySearch").addEventListener("input", event => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      folderWorkspace.setFilter({ query: event.target.value });
+      await rebuildWorkspaceGallery();
+    }, 120);
+  });
+  $("#gallerySort").addEventListener("change", async event => {
+    folderWorkspace.setSort(event.target.value);
+    setMessage("並び替えています…");
+    await rebuildWorkspaceGallery();
+    setMessage(folderWorkspace.pathLabel);
+  });
+  $("#gallerySortDirection").addEventListener("click", async event => {
+    const next = event.currentTarget.dataset.direction === "asc" ? "desc" : "asc";
+    event.currentTarget.dataset.direction = next;
+    event.currentTarget.textContent = next === "asc" ? "↑" : "↓";
+    event.currentTarget.title = next === "asc" ? "昇順" : "降順";
+    folderWorkspace.setSort(folderWorkspace.sort.field, next);
+    await rebuildWorkspaceGallery();
+  });
+  $("#galleryImageOnly").addEventListener("change", async event => {
+    folderWorkspace.setFilter({ imageOnly: event.target.checked });
+    await rebuildWorkspaceGallery();
+  });
+
+  $("#thumbnailGrid").addEventListener("keydown", async event => {
+    if (event.key === "Enter" && selectedGalleryIndex >= 0) {
+      event.preventDefault();
+      await openGalleryItem(galleryItems[selectedGalleryIndex]);
+    }
+  });
+
   $("#slideshowFiles").addEventListener("click", () => {
     galleryPendingAction = "slideshow";
     $("#galleryFileInput").click();
   });
-  $("#slideshowPrev").addEventListener("click", () => showSlide(slideshowIndex - 1));
-  $("#slideshowNext").addEventListener("click", () => showSlide(slideshowIndex + 1));
+  $("#slideshowPrev").addEventListener("click", () => void showSlide(slideshowIndex - 1));
+  $("#slideshowNext").addEventListener("click", () => void showSlide(slideshowIndex + 1));
   $("#slideshowPlay").addEventListener("click", toggleSlideshow);
   $("#slideshowInterval").addEventListener("change", () => {
     if (slideshowTimer) startSlideshow();
@@ -2728,15 +3105,17 @@ function setupGallery() {
   $("#slideshowDialog").addEventListener("keydown", event => {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      showSlide(slideshowIndex - 1);
+      void showSlide(slideshowIndex - 1);
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      showSlide(slideshowIndex + 1);
+      void showSlide(slideshowIndex + 1);
     } else if (event.code === "Space") {
       event.preventDefault();
       toggleSlideshow();
     }
   });
+
+  renderWorkspaceChrome();
 }
 
 function openSaveDialog() {
