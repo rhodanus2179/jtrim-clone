@@ -124,15 +124,49 @@ function rgbToHex(r, g, b) {
     .toUpperCase();
 }
 
+let statusPixelHex = null;
+
+function updateStatusPixelColor(rgba = null) {
+  const colorButton = $("#statusColor");
+  const swatch = $("#statusColorSwatch");
+  const hexNode = $("#statusHex");
+  const rgbNode = $("#statusRgb");
+  const alphaNode = $("#statusAlpha");
+
+  if (!rgba) {
+    statusPixelHex = null;
+    hexNode.textContent = "#——";
+    rgbNode.textContent = "RGB —";
+    alphaNode.hidden = true;
+    alphaNode.textContent = "";
+    swatch.style.removeProperty("background");
+    colorButton.setAttribute("aria-disabled", "true");
+    colorButton.setAttribute("aria-label", "ピクセル色。画像上にポインターを移動すると表示します");
+    return;
+  }
+
+  const [r, g, b, a = 255] = rgba;
+  const hex = rgbToHex(r, g, b);
+  statusPixelHex = hex;
+  hexNode.textContent = hex;
+  rgbNode.textContent = `RGB ${r}, ${g}, ${b}`;
+  alphaNode.hidden = a >= 255;
+  alphaNode.textContent = a < 255 ? `A ${a}` : "";
+  swatch.style.background = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+  colorButton.setAttribute("aria-disabled", "false");
+  colorButton.setAttribute(
+    "aria-label",
+    `ピクセル色 ${hex}、RGB ${r}, ${g}, ${b}${a < 255 ? `、Alpha ${a}` : ""}。押すとHEXカラーをコピーします`
+  );
+}
+
 const selection = new SelectionController({
   canvas,
   overlay: overlayCanvas,
   state,
   onStatus: ({ x, y, rgba }) => {
     $("#statusPosition").textContent = `x: ${x}, y: ${y}`;
-    const hex = rgbToHex(rgba[0], rgba[1], rgba[2]);
-    $("#statusColor").textContent =
-      `RGB: ${rgba[0]}, ${rgba[1]}, ${rgba[2]} / HEX: ${hex}${rgba[3] < 255 ? ` / A:${rgba[3]}` : ""}`;
+    updateStatusPixelColor(rgba);
   }
 });
 
@@ -222,8 +256,14 @@ function showDocument() {
 
 function refreshUI() {
   const doc = state.document;
-  $("#statusFile").textContent = doc ? `${doc.fileName}${doc.modified ? " *" : ""}` : "画像未読込";
+  const statusFile = $("#statusFile");
+  statusFile.textContent = doc ? `${doc.fileName}${doc.modified ? " *" : ""}` : "画像未読込";
+  statusFile.title = doc ? doc.fileName : "画像未読込";
   $("#statusSize").textContent = doc ? `${canvas.width} × ${canvas.height} px` : "—";
+  if (!doc) {
+    $("#statusPosition").textContent = "x: —, y: —";
+    updateStatusPixelColor();
+  }
   $("#statusZoom").textContent = `${Math.round(state.zoom * 100)}%`;
 
   const s = state.selection;
@@ -4986,6 +5026,21 @@ function setupKeyboard() {
   });
 }
 
+function setupStatusBar() {
+  updateStatusPixelColor();
+
+  $("#statusColor").addEventListener("click", async () => {
+    if (!statusPixelHex) return;
+    try {
+      await navigator.clipboard.writeText(statusPixelHex);
+      setMessage(`${statusPixelHex} をクリップボードへコピーしました`);
+    } catch (error) {
+      console.debug("HEX clipboard copy unavailable:", error);
+      setMessage("HEXカラーをコピーできませんでした");
+    }
+  });
+}
+
 function setupBeforeUnload() {
   window.addEventListener("beforeunload", event => {
     if (state.document?.modified) {
@@ -5064,6 +5119,7 @@ setupGallery();
 setupFileInput();
 setupZoom();
 setupKeyboard();
+setupStatusBar();
 setupBeforeUnload();
 
 state.subscribe(() => refreshUI());
