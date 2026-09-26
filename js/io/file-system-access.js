@@ -180,6 +180,122 @@ export async function getOrCreateDirectory(parentHandle, name) {
   return await parentHandle.getDirectoryHandle(name, { create: true });
 }
 
+
+export async function getDroppedFileSystemHandles(dataTransfer) {
+  const items = [...(dataTransfer?.items || [])];
+  const handles = [];
+  for (const item of items) {
+    if (item.kind !== "file" || typeof item.getAsFileSystemHandle !== "function") continue;
+    try {
+      const handle = await item.getAsFileSystemHandle();
+      if (handle) handles.push(handle);
+    } catch {
+      // Fall back to DataTransfer.files in the caller.
+    }
+  }
+  return handles;
+}
+
+export async function walkDirectory(directoryHandle, {
+  recursive = true,
+  imageOnly = false,
+  excludeHandles = [],
+  maxFiles = 20000
+} = {}) {
+  if (!directoryHandle || directoryHandle.kind !== "directory") {
+    throw new TypeError("DirectoryHandle が必要です。");
+  }
+
+  const results = [];
+  const excluded = excludeHandles.filter(Boolean);
+
+  async function isExcluded(handle) {
+    for (const candidate of excluded) {
+      if (await isSameHandle(handle, candidate)) return true;
+    }
+    return false;
+  }
+
+  async function visit(dirHandle, pathParts) {
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === "directory") {
+        if (!recursive || await isExcluded(entry)) continue;
+        await visit(entry, [...pathParts, entry.name]);
+        continue;
+      }
+
+      if (entry.kind !== "file") continue;
+      if (imageOnly && !isLikelyImageName(entry.name)) continue;
+      results.push({
+        kind: "file",
+        name: entry.name,
+        handle: entry,
+        parentHandle: dirHandle,
+        relativePath: [...pathParts, entry.name].join("/")
+      });
+      if (results.length >= maxFiles) {
+        throw new Error(`対象ファイルが${maxFiles.toLocaleString()}件を超えました。対象フォルダを分けてください。`);
+      }
+    }
+  }
+
+  await visit(directoryHandle, []);
+  return results;
+}
+
+export async function getOrCreateDirectoryPath(rootHandle, pathParts = []) {
+  let current = rootHandle;
+  for (const rawName of pathParts) {
+    const name = String(rawName || "").trim();
+    if (!name || name === "." || name === ".." || /[\\/:*?"<>|]/.test(name)) {
+      throw new Error(`出力フォルダ名が不正です: ${rawName}`);
+    }
+    current = await getOrCreateDirectory(current, name);
+  }
+  return current;
+}
+
+async function digestBytes(bytes) {
+  if (!globalThis.crypto?.subtle) return null;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return [...digest].map(v => v.toString(16).padStart(2, "0")).join("");
+}
+
+export async function createFileSnapshot(file, {
+  sampleBytes = 65536
+} = {}) {
+  if (!file) return null;
+  const size = file.size ?? 0;
+  const headEnd = Math.min(size, sampleBytes);
+  const tailStart = Math.max(headEnd, size - sampleBytes);
+  const [head, tail] = await Promise.all([
+    file.slice(0, headEnd).arrayBuffer(),
+    tailStart < size ? file.slice(tailStart, size).arrayBuffer() : Promise.resolve(new ArrayBuffer(0))
+  ]);
+  const combined = new Uint8Array(head.byteLength + tail.byteLength + 16);
+  combined.set(new Uint8Array(head), 0);
+  combined.set(new Uint8Array(tail), head.byteLength);
+  const view = new DataView(combined.buffer);
+  const meta = head.byteLength + tail.byteLength;
+  view.setBigUint64(meta, BigInt(size), true);
+  view.setBigUint64(meta + 8, BigInt(file.lastModified || 0), true);
+
+  return {
+    size,
+    lastModified: file.lastModified || 0,
+    fingerprint: await digestBytes(combined)
+  };
+}
+
+export function fileSnapshotChanged(previous, current) {
+  if (!previous || !current) return false;
+  if (previous.size !== current.size || previous.lastModified !== current.lastModified) return true;
+  if (previous.fingerprint && current.fingerprint) {
+    return previous.fingerprint !== current.fingerprint;
+  }
+  return false;
+}
+
 export async function isSameHandle(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
