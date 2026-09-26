@@ -27,6 +27,8 @@ jobs:
         run: node tests/file-system-access-smoke.mjs
       - name: Run JPEG / print smoke tests
         run: node tests/jpeg-print-smoke.mjs
+      - name: Run shortcut smoke tests
+        run: node tests/shortcuts-smoke.mjs
       - name: Run advanced JPEG codec smoke tests
         run: node tests/advanced-codec-smoke.mjs
       - name: Check required entry files
