@@ -146,3 +146,103 @@ input[type="color"] { width: 42px; height: 32px; border: 1px solid var(--border)
   .tool { min-width: 36px; }
   .status-bar > span:nth-child(4), .status-bar > span:nth-child(5) { display: none; }
 }
+
+.gallery-modal {
+  width: min(1080px, calc(100vw - 36px));
+  height: min(780px, calc(100vh - 36px));
+}
+.gallery-body {
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  height: calc(100% - 116px);
+}
+.thumbnail-grid {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 4px;
+}
+.thumbnail-item {
+  min-width: 0;
+  height: 165px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  text-align: left;
+}
+.thumbnail-item:hover { border-color: var(--primary); background: #eef5ff; }
+.thumbnail-item img {
+  width: 100%;
+  height: 118px;
+  object-fit: contain;
+  background:
+    linear-gradient(45deg, #eceff2 25%, transparent 25%),
+    linear-gradient(-45deg, #eceff2 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #eceff2 75%),
+    linear-gradient(-45deg, transparent 75%, #eceff2 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  border-radius: 5px;
+}
+.thumbnail-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.slideshow-modal {
+  width: min(1200px, calc(100vw - 30px));
+  height: min(860px, calc(100vh - 30px));
+}
+.slideshow-stage {
+  height: calc(100% - 126px);
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #171a1f;
+}
+.slideshow-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.slideshow-caption {
+  height: 34px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 0 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.slideshow-caption span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slideshow-controls {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.slideshow-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+progress {
+  accent-color: var(--primary);
+  height: 14px;
+}
