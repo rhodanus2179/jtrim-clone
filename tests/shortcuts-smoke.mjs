@@ -58,4 +58,10 @@ assert.equal(shortcutMatches(keyEvent("p", { ctrl: true, alt: true }), SHORTCUTS
 assert.equal(displayShortcutLabel(SHORTCUTS["file.save"], { apple: false }), "Ctrl+Alt+S");
 assert.equal(displayShortcutLabel(SHORTCUTS["file.save"], { apple: true }), "⌘⌥S");
 
+const altGraphEvent = {
+  ...keyEvent("s", { ctrl: true, alt: true }),
+  getModifierState: name => name === "AltGraph"
+};
+assert.equal(shortcutCommandForEvent(altGraphEvent), null);
+
 console.log("Shortcut smoke tests passed");
