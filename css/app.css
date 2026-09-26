@@ -358,7 +358,6 @@ input[type="color"] { width: 42px; height: 32px; border: 1px solid var(--border)
   .privacy-note { display: none; }
   .tool span { display: none; }
   .tool { min-width: 36px; }
-  .status-bar > span:nth-child(4), .status-bar > span:nth-child(5) { display: none; }
 }
 
 .gallery-modal {
