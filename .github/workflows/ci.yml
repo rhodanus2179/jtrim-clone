@@ -19,6 +19,8 @@ jobs:
         run: node --input-type=module -e "globalThis.self={}; await import('./js/worker/image-worker.js')"
       - name: Check IO module imports
         run: node --input-type=module -e "await import('./js/io/files.js'); await import('./js/io/jpeg-exif.js'); await import('./js/io/zip.js')"
+      - name: Run IO smoke tests
+        run: node tests/io-smoke.mjs
       - name: Check required entry files
         run: |
           test -f index.html
