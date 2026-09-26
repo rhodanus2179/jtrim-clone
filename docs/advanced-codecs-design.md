@@ -3,6 +3,21 @@
 更新日: 2026-09-26  
 対象: jtrim-clone v0.10.0 以降
 
+## 実装状況（2026-09-27）
+
+- CODEC-1 Codec Worker / lazy loader: **実装済み**
+- CODEC-2 JPEGロスレス回転 / 反転: **実装済み**
+- CODEC-3 Progressive / Sequential JPEG: **実装済み**
+- CODEC-4 Adam7 Interlaced PNG: **実装済み**
+- CODEC-5 Optimization / compatibility:
+  - pristine JPEG追跡: **実装済み**
+  - DCT再量子化なしのProgressive / Sequential transcode: **実装済み**
+  - 元JPEGサブサンプリング維持: **実装済み**
+  - generated codec smoke test / reproducible build / third-party notices: **実装済み**
+  - 大画像stress test・主要ブラウザ手動試験・offline/cache確認: **未実施**
+
+実装では通常のPNG・WebPや、元JPEG情報を利用できない通常JPEGはCanvas native encoderを維持する。一方、元JPEGのサブサンプリング維持が可能なJPEG保存では、Sequentialでも必要時にcjpeg codecをlazy-loadする。
+
 ## 1. 目的
 
 JTrim 1.53c にある以下の機能を、ブラウザ上で「見かけだけ」ではなく圧縮形式の意味まで含めて再現する。
@@ -73,8 +88,12 @@ PNG仕様上、interlace method 1 は Adam7 の7パス方式とする。
 Advanced Codec を使う条件だけを限定する。
 
 ```text
-通常 JPEG / PNG
+通常 PNG / WebP
   -> Canvas native encoder
+
+通常 JPEG
+  -> 元JPEGのsampling情報がなければCanvas native encoder
+  -> sampling維持が可能ならJPEG WASM encoder
 
 Progressive JPEG
   -> JPEG WASM encoder
