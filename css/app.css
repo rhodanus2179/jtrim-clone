@@ -39,8 +39,25 @@ button:disabled { opacity: .42; cursor: default !important; }
 .menu-trigger { height: 100%; padding: 0 12px; border: 0; background: transparent; cursor: default; border-radius: 5px; }
 .menu-trigger:hover, .menu.open > .menu-trigger { background: #edf3fb; }
 .menu-popup {
-  display: none; position: absolute; left: 0; top: calc(100% - 2px); min-width: 290px; padding: 6px;
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow); z-index: 100;
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% - 2px);
+  min-width: 290px;
+  max-width: calc(100vw - 12px);
+  max-height: calc(100dvh - 84px);
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  align-content: start;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 100;
 }
 .menu-popup.align-right { left: auto; right: 0; }
 .menu.open .menu-popup { display: grid; }
@@ -50,6 +67,22 @@ button:disabled { opacity: .42; cursor: default !important; }
 }
 .menu-popup button:hover:not(:disabled) { background: #eaf2fd; }
 .menu-popup hr { width: 100%; border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.menu-popup.is-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.menu-popup.is-scrollable::-webkit-scrollbar { width: 10px; }
+.menu-popup.is-scrollable::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid var(--surface);
+  border-radius: 999px;
+}
+.menu-popup.is-scrollable::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-height: 700px) {
+  .menu-popup button { padding-block: 6px; }
+  .menu-popup hr { margin-block: 2px; }
+}
 kbd { margin-left: auto; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 400; }
 
 .toolbar { min-height: var(--toolbar-height); display: flex; align-items: center; gap: 3px; padding: 5px 8px; overflow-x: auto; }
