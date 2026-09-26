@@ -425,6 +425,50 @@ export function addShadow(canvas, selection = null, {
   return true;
 }
 
+
+export function applyTexture(canvas, textureCanvas, selection = null, {
+  opacity = 100,
+  scale = 100,
+  offsetX = 0,
+  offsetY = 0
+} = {}) {
+  if (!textureCanvas?.width || !textureCanvas?.height) return false;
+  const region = normalizedRegion(canvas, selection);
+  if (region.width < 1 || region.height < 1) return false;
+
+  opacity = Math.max(0, Math.min(100, Number(opacity) || 0)) / 100;
+  scale = Math.max(1, Math.min(1000, Number(scale) || 100)) / 100;
+  offsetX = Math.round(Number(offsetX) || 0);
+  offsetY = Math.round(Number(offsetY) || 0);
+
+  const tile = document.createElement("canvas");
+  tile.width = Math.max(1, Math.round(textureCanvas.width * scale));
+  tile.height = Math.max(1, Math.round(textureCanvas.height * scale));
+  const tctx = tile.getContext("2d");
+  tctx.filter = "grayscale(1)";
+  tctx.drawImage(textureCanvas, 0, 0, tile.width, tile.height);
+
+  const layer = document.createElement("canvas");
+  layer.width = region.width;
+  layer.height = region.height;
+  const lctx = layer.getContext("2d");
+  const pattern = lctx.createPattern(tile, "repeat");
+  if (!pattern) return false;
+  lctx.save();
+  lctx.translate(offsetX, offsetY);
+  lctx.fillStyle = pattern;
+  lctx.fillRect(-offsetX, -offsetY, layer.width, layer.height);
+  lctx.restore();
+
+  const ctx = context(canvas);
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.globalCompositeOperation = "multiply";
+  ctx.drawImage(layer, region.x, region.y);
+  ctx.restore();
+  return true;
+}
+
 export function copyRegion(canvas, selection = null) {
   const region = normalizedRegion(canvas, selection);
   if (region.width < 1 || region.height < 1) return null;
