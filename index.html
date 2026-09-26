@@ -26,6 +26,7 @@
             <button data-command="file.new">新規作成(N)… <kbd>Ctrl+N</kbd></button>
             <button data-command="file.open">開く(O)… <kbd>Ctrl+O</kbd></button>
             <button data-command="file.openFolder">フォルダを開く…</button>
+            <button data-command="file.recentFolders">最近使ったフォルダ…</button>
             <hr>
             <button data-command="file.overwrite">上書き保存(S) <kbd>Ctrl+S</kbd></button>
             <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Shift+A</kbd></button>
@@ -239,6 +240,22 @@
   <input id="textureFileInput" type="file" accept="image/*" hidden>
   <input id="batchFileInput" type="file" accept="image/*" multiple hidden>
   <input id="galleryFileInput" type="file" accept="image/*" multiple hidden>
+
+
+  <dialog id="recentFoldersDialog" class="modal wide-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>最近使ったフォルダ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <p class="help-text">保存されるのはフォルダへのハンドルと表示名だけです。画像内容はIndexedDBへ保存しません。権限が切れている場合は、開くときに再接続を求めます。</p>
+        <div id="recentFoldersList" class="recent-folders-list"></div>
+        <p id="recentFoldersEmpty" class="help-text">最近使ったフォルダはありません。</p>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="recentFoldersClear">履歴を消去</button>
+        <button class="primary" value="default">閉じる</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="newDialog" class="modal">
     <form method="dialog" id="newForm">
