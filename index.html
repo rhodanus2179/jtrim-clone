@@ -23,23 +23,23 @@
         <div class="menu">
           <button class="menu-trigger">ファイル(F)</button>
           <div class="menu-popup">
-            <button data-command="file.new">新規作成(N)… <kbd>Ctrl+N</kbd></button>
-            <button data-command="file.open">開く(O)… <kbd>Ctrl+O</kbd></button>
-            <button data-command="file.reload">読み込み直す(R) <kbd>Ctrl+Shift+R</kbd></button>
+            <button data-command="file.new">新規作成(N)… <kbd>Ctrl+Alt+N</kbd></button>
+            <button data-command="file.open">開く(O)… <kbd>Ctrl+Alt+O</kbd></button>
+            <button data-command="file.reload">読み込み直す(R) <kbd>Ctrl+Alt+L</kbd></button>
             <button data-command="file.openFolder">フォルダを開く…</button>
             <button data-command="file.recentFolders">最近使ったフォルダ…</button>
             <hr>
             <button data-command="file.overwrite">上書き保存(S) <kbd>Ctrl+S</kbd></button>
-            <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Shift+A</kbd></button>
+            <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Alt+S</kbd></button>
             <button data-command="file.saveOptions">保存オプション…</button>
             <hr>
             <button data-command="file.printSetup">印刷設定…</button>
             <button data-command="file.print">印刷(P)… <kbd>Ctrl+P</kbd></button>
-            <button data-command="file.printPreview">印刷プレビュー… <kbd>Ctrl+Shift+P</kbd></button>
+            <button data-command="file.printPreview">印刷プレビュー… <kbd>Ctrl+Alt+P</kbd></button>
             <hr>
-            <button data-command="file.thumbnails">サムネイル表示(T) <kbd>Ctrl+Alt+T</kbd></button>
-            <button data-command="file.batch">一括変換(B)… <kbd>Ctrl+B</kbd></button>
-            <button data-command="file.slideshow">スライドショー(W)… <kbd>Ctrl+W</kbd></button>
+            <button data-command="file.thumbnails">サムネイル表示(T) <kbd>Ctrl+Alt+H</kbd></button>
+            <button data-command="file.batch">一括変換(B)… <kbd>Ctrl+Alt+B</kbd></button>
+            <button data-command="file.slideshow">スライドショー(W)… <kbd>Ctrl+Alt+W</kbd></button>
           </div>
         </div>
         <div class="menu">
@@ -68,25 +68,25 @@
           <div class="menu-popup">
             <button data-command="view.fit">ウィンドウに合わせる</button>
             <button data-command="view.actual">100%</button>
-            <button data-command="view.zoomIn">ズームイン(+) <kbd>Ctrl++</kbd></button>
-            <button data-command="view.zoomOut">ズームアウト(-) <kbd>Ctrl+-</kbd></button>
+            <button data-command="view.zoomIn">ズームイン(+) <kbd>+</kbd></button>
+            <button data-command="view.zoomOut">ズームアウト(-) <kbd>-</kbd></button>
           </div>
         </div>
         <div class="menu">
           <button class="menu-trigger">イメージ(I)</button>
           <div class="menu-popup">
-            <button data-command="image.resize">リサイズ(S)… <kbd>Ctrl+R</kbd></button>
-            <button data-command="image.crop">切り抜き(T) <kbd>Ctrl+T</kbd></button>
+            <button data-command="image.resize">リサイズ(S)… <kbd>Ctrl+Alt+R</kbd></button>
+            <button data-command="image.crop">切り抜き(T) <kbd>Ctrl+Alt+C</kbd></button>
             <button data-command="image.circleCrop">円形切り抜き(E)…</button>
             <button data-command="image.roundedCrop">角丸切り抜き(O)…</button>
-            <button data-command="image.coordinateCrop">座標指定切り抜き(U)… <kbd>Ctrl+U</kbd></button>
+            <button data-command="image.coordinateCrop">座標指定切り抜き(U)… <kbd>Ctrl+Alt+U</kbd></button>
             <hr>
             <button data-command="image.rotateLeft">左へ90度回転(L)</button>
             <button data-command="image.rotateRight">右へ90度回転(R)</button>
             <button data-command="image.rotateArbitrary">任意角度回転(A)…</button>
             <hr>
-            <button data-command="image.flipH">ミラー(M) <kbd>Ctrl+M</kbd></button>
-            <button data-command="image.flipV">フリップ(F) <kbd>Ctrl+F</kbd></button>
+            <button data-command="image.flipH">ミラー(M) <kbd>Ctrl+Alt+M</kbd></button>
+            <button data-command="image.flipV">フリップ(F) <kbd>Ctrl+Alt+F</kbd></button>
             <button data-command="image.shift">シフト(H)…</button>
             <button data-command="image.margin">余白作成(W)…</button>
             <button data-command="image.shadow">影をつける(D)…</button>
@@ -100,8 +100,8 @@
             <button data-command="image.densityMax">最大濃度抽出</button>
             <hr>
             <button data-command="image.jpegInfo">JPEG品質…</button>
-            <button data-command="image.jpegLossless">JPEGロスレス回転／反転… <kbd>Ctrl+J</kbd></button>
-            <button id="interlaceMenuItem" data-command="image.toggleInterlace"><span id="interlaceMenuLabel">インターレース／プログレッシブ(I)</span> <kbd>Ctrl+I</kbd></button>
+            <button data-command="image.jpegLossless">JPEGロスレス回転／反転… <kbd>Ctrl+Alt+J</kbd></button>
+            <button id="interlaceMenuItem" data-command="image.toggleInterlace"><span id="interlaceMenuLabel">インターレース／プログレッシブ(I)</span> <kbd>Ctrl+Alt+I</kbd></button>
             <hr>
             <button data-command="image.transparentColor">透過色設定(G)…</button>
             <button data-command="image.toggleTransparency">透過状態を表示(B)</button>
@@ -110,7 +110,7 @@
         <div class="menu">
           <button class="menu-trigger">カラー(C)</button>
           <div class="menu-popup">
-            <button data-command="color.grayscale">グレースケール変換(G) <kbd>Ctrl+G</kbd></button>
+            <button data-command="color.grayscale">グレースケール変換(G) <kbd>Ctrl+Alt+G</kbd></button>
             <button data-command="color.sepia">セピア色変換(P)</button>
             <button data-command="color.invert">ネガポジ反転(N)</button>
             <button data-command="color.colorScale">単色カラースケール(U)…</button>
@@ -181,14 +181,14 @@
       </nav>
 
       <div class="toolbar" aria-label="ツールバー">
-        <button class="tool" data-command="file.open" title="開く (Ctrl+O)">📂<span>開く</span></button>
+        <button class="tool" data-command="file.open" title="開く (Ctrl+Alt+O)">📂<span>開く</span></button>
         <button class="tool" data-command="file.save" title="保存">💾<span>保存</span></button>
         <span class="separator"></span>
         <button class="tool" data-command="edit.undo" title="元に戻す (Ctrl+Z)">↶<span>戻す</span></button>
         <button class="tool" data-command="edit.redo" title="やり直し (Ctrl+Y)">↷<span>進む</span></button>
         <span class="separator"></span>
-        <button class="tool" data-command="image.crop" title="切り抜き (Ctrl+T)">✂<span>切抜</span></button>
-        <button class="tool" data-command="image.resize" title="リサイズ (Ctrl+R)">↔<span>リサイズ</span></button>
+        <button class="tool" data-command="image.crop" title="切り抜き (Ctrl+Alt+C)">✂<span>切抜</span></button>
+        <button class="tool" data-command="image.resize" title="リサイズ (Ctrl+Alt+R)">↔<span>リサイズ</span></button>
         <button class="tool" data-command="image.rotateLeft" title="左へ90度回転">⟲<span>左90°</span></button>
         <button class="tool" data-command="image.rotateRight" title="右へ90度回転">⟳<span>右90°</span></button>
         <span class="separator"></span>
