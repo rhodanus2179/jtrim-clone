@@ -139,7 +139,26 @@ JTrimの基本用途である「開く→切り抜く→縮小→保存」が成
 - Exif preservation
 - JPEG target-size save
 
-## Milestone 8 — 互換性検証
+## Milestone 8 — 高度コーデック
+
+- Codec Worker / lazy WASM loader
+- libjpeg-turbo WASM wrapper
+- JPEGロスレス回転 / 反転
+- partial iMCU perfect / trim処理
+- Exif Orientation正規化
+- Progressive / Sequential JPEG
+- libspng WASM wrapper
+- Adam7 Interlaced PNG
+- 保存 / 目標サイズ / 一括変換への統合
+- third-party notices / reproducible WASM build
+
+完了条件:
+- JPEGロスレス変換でCanvas再エンコードを行わない
+- Progressive JPEGのSOF形式を検証できる
+- Interlaced PNGのIHDR interlace method=1を検証できる
+- 通常保存時はWASMをロードしない
+
+## Milestone 9 — 互換性検証
 
 - original JTrim output fixture collection
 - pixel diff
