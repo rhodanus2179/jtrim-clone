@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.7.0</span>
+          <span class="version">v0.8.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -25,6 +25,7 @@
           <div class="menu-popup">
             <button data-command="file.new">新規作成(N)… <kbd>Ctrl+N</kbd></button>
             <button data-command="file.open">開く(O)… <kbd>Ctrl+O</kbd></button>
+            <button data-command="file.openFolder">フォルダを開く…</button>
             <hr>
             <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Shift+A</kbd></button>
             <hr>
@@ -204,9 +205,10 @@
         <p>PNG / JPEG / WebP / GIF / BMP など、ブラウザで読み込める画像に対応します。</p>
         <div class="empty-actions">
           <button class="primary" data-command="file.open">画像を開く</button>
+          <button data-command="file.openFolder">フォルダを開く</button>
           <button data-command="file.new">新規画像</button>
         </div>
-        <p class="hint">画像ファイルをここへドラッグ＆ドロップすることもできます。</p>
+        <p class="hint">画像ファイルをここへドラッグ＆ドロップできます。対応ブラウザではフォルダを選んで参照できます。</p>
       </div>
 
       <div class="canvas-scroller" id="canvasScroller" hidden>
@@ -1018,15 +1020,45 @@
 
   <dialog id="thumbnailDialog" class="modal gallery-modal">
     <form method="dialog">
-      <div class="dialog-head"><h2>サムネイル表示</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
-      <div class="dialog-body gallery-body">
-        <div class="inline-fields">
-          <button type="button" id="galleryChooseFiles">画像を選び直す</button>
-          <span id="galleryCount" class="help-text">0ファイル</span>
+      <div class="dialog-head">
+        <div>
+          <h2>サムネイル表示</h2>
+          <div id="galleryModeLabel" class="dialog-subtitle">複数ファイルモード</div>
         </div>
-        <div id="thumbnailGrid" class="thumbnail-grid"></div>
+        <button value="cancel" class="icon-button" aria-label="閉じる">×</button>
       </div>
-      <div class="dialog-actions"><button class="primary" value="default">閉じる</button></div>
+      <div class="dialog-body gallery-body">
+        <div class="gallery-toolbar">
+          <div class="inline-fields">
+            <button type="button" id="galleryOpenFolder">フォルダを開く</button>
+            <button type="button" id="galleryChooseFiles">複数ファイルを選択</button>
+            <button type="button" id="galleryRefresh" hidden>更新</button>
+            <span id="galleryCount" class="help-text">0ファイル</span>
+          </div>
+          <div id="workspaceBrowserControls" class="workspace-browser-controls" hidden>
+            <nav id="workspaceBreadcrumbs" class="workspace-breadcrumbs" aria-label="フォルダ階層"></nav>
+            <div class="gallery-filter-row">
+              <label>検索 <input id="gallerySearch" type="search" placeholder="ファイル名"></label>
+              <label>並び順
+                <select id="gallerySort">
+                  <option value="name">名前</option>
+                  <option value="date">更新日時</option>
+                  <option value="size">サイズ</option>
+                  <option value="type">種類</option>
+                </select>
+              </label>
+              <button type="button" id="gallerySortDirection" data-direction="asc" title="昇順">↑</button>
+              <label class="check-row"><input id="galleryImageOnly" type="checkbox" checked> 画像のみ</label>
+              <span id="workspacePermissionStatus" class="help-text"></span>
+            </div>
+          </div>
+        </div>
+        <div id="thumbnailGrid" class="thumbnail-grid" tabindex="0"></div>
+      </div>
+      <div class="dialog-actions">
+        <span class="help-text gallery-action-hint">フォルダはダブルクリックで移動、画像はダブルクリックまたはEnterで開きます。</span>
+        <button class="primary" value="default">閉じる</button>
+      </div>
     </form>
   </dialog>
 
@@ -1077,7 +1109,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.7.0</strong></p>
+        <p><strong>JTrim Web v0.8.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
