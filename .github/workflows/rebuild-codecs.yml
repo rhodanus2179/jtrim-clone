@@ -1,0 +1,111 @@
+name: Rebuild browser codecs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/wasm/**"
+      - ".github/workflows/rebuild-codecs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-browser-codecs
+  cancel-in-progress: true
+
+jobs:
+  jpegtran:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.15
+          actions-cache-folder: emsdk-cache
+
+      - name: Fetch pinned libjpeg-turbo
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=3.2.0
+          URL=https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/${VERSION}/libjpeg-turbo-${VERSION}.tar.gz
+          EXPECTED=6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e
+          curl -L --fail --retry 3 -o /tmp/libjpeg-turbo.tar.gz "$URL"
+          echo "$EXPECTED  /tmp/libjpeg-turbo.tar.gz" | sha256sum -c -
+          rm -rf /tmp/libjpeg-turbo-src
+          mkdir -p /tmp/libjpeg-turbo-src
+          tar -xzf /tmp/libjpeg-turbo.tar.gz -C /tmp/libjpeg-turbo-src --strip-components=1
+
+      - name: Build jpegtran as single-file ES module
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/libjpeg-turbo-build
+          mkdir -p /tmp/libjpeg-turbo-build
+          cd /tmp/libjpeg-turbo-build
+          emcmake cmake /tmp/libjpeg-turbo-src             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_EXECUTABLE_SUFFIX=.js             -DENABLE_SHARED=FALSE             -DENABLE_STATIC=TRUE             -DWITH_SIMD=FALSE             -DWITH_TOOLS=TRUE             -DWITH_TESTS=FALSE             -DCMAKE_EXE_LINKER_FLAGS="-O3 -sSINGLE_FILE=1 -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,callMain"
+          cmake --build . --target jpegtran --parallel 2
+          find . -maxdepth 2 -type f -name 'jpegtran*.js' -print
+          BUILT=$(find . -maxdepth 2 -type f -name 'jpegtran*.js' | head -n1)
+          test -n "$BUILT"
+          mkdir -p "$GITHUB_WORKSPACE/js/codecs/generated"
+          cp "$BUILT" "$GITHUB_WORKSPACE/js/codecs/generated/jpegtran-module.js"
+          printf '\n// Generated from libjpeg-turbo 3.2.0 by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/jpegtran-module.js"
+
+      - name: Copy third-party notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/libjpeg-turbo
+          cp /tmp/libjpeg-turbo-src/LICENSE.md third_party/libjpeg-turbo/LICENSE.md
+          cp /tmp/libjpeg-turbo-src/README.ijg third_party/libjpeg-turbo/README.ijg
+
+      - name: Smoke-test generated jpegtran module
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pillow
+          python - <<'PY'
+          from PIL import Image
+          im = Image.new("RGB", (32, 16))
+          for y in range(16):
+              for x in range(32):
+                  im.putpixel((x,y), ((x*7)%256, (y*13)%256, ((x+y)*5)%256))
+          im.save("/tmp/input.jpg", quality=90, subsampling=0)
+          PY
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import createJpegtran from './js/codecs/generated/jpegtran-module.js';
+          const mod = await createJpegtran({ noInitialRun: true, print: () => {}, printErr: console.error });
+          mod.FS.writeFile('/input.jpg', fs.readFileSync('/tmp/input.jpg'));
+          mod.callMain(['-copy','all','-perfect','-rotate','90','-outfile','/output.jpg','/input.jpg']);
+          const out = mod.FS.readFile('/output.jpg');
+          if (out.length < 100) throw new Error('jpegtran output is unexpectedly small');
+          fs.writeFileSync('/tmp/output.jpg', out);
+          NODE
+          python - <<'PY'
+          from PIL import Image
+          im = Image.open("/tmp/output.jpg")
+          assert im.size == (16, 32), im.size
+          im.verify()
+          print("jpegtran WASM smoke test passed")
+          PY
+
+      - name: Commit generated codec
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add js/codecs/generated/jpegtran-module.js third_party/libjpeg-turbo/LICENSE.md third_party/libjpeg-turbo/README.ijg
+          if git diff --cached --quiet; then
+            echo "Generated codec is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build: update browser jpegtran codec"
+          git push
