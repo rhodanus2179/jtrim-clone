@@ -17,6 +17,9 @@ import { createZip } from "./io/zip.js";
 import {
   getFileSystemCapabilities,
   pickWorkspaceDirectory,
+  pickSaveFileHandle,
+  ensureHandlePermission,
+  writeBlobToFileHandle,
   getFileFromHandle,
   isLikelyImageName
 } from "./io/file-system-access.js";
@@ -317,6 +320,10 @@ function setupCommands() {
     .register("file.openFolder", {
       run: openWorkspaceFolder,
       enabled: () => !state.busy && fsCapabilities.directoryPicker
+    })
+    .register("file.overwrite", {
+      run: overwriteCurrentDocument,
+      enabled: documentReady
     })
     .register("file.save", {
       run: openSaveDialog,
@@ -3118,6 +3125,129 @@ function setupGallery() {
   renderWorkspaceChrome();
 }
 
+
+function writableImageType(type, fileName = "") {
+  if (["image/jpeg", "image/png", "image/webp"].includes(type)) return type;
+  const lower = String(fileName || "").toLowerCase();
+  if (/\.jpe?g$/.test(lower)) return "image/jpeg";
+  if (/\.png$/.test(lower)) return "image/png";
+  if (/\.webp$/.test(lower)) return "image/webp";
+  return null;
+}
+
+function nameWithTypeExtension(name, type) {
+  const base = String(name || "image").replace(/\.[^.]+$/, "");
+  const ext = type === "image/jpeg" ? ".jpg" : type === "image/webp" ? ".webp" : ".png";
+  return base + ext;
+}
+
+function currentSaveQuality(type) {
+  if (type === "image/webp") return Number($("#saveWebpQuality").value) / 100;
+  if (type === "image/jpeg") return Number($("#saveQuality").value) / 100;
+  return .92;
+}
+
+async function encodeCurrentForSave(type, {
+  preserveExif = true,
+  respectTargetMode = false
+} = {}) {
+  const exifSegment = type === "image/jpeg" && preserveExif
+    ? state.document?.exifSegment
+    : null;
+
+  if (
+    type === "image/jpeg" &&
+    respectTargetMode &&
+    document.querySelector('input[name="jpegMode"]:checked')?.value === "target"
+  ) {
+    const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
+    const result = await encodeJpegToTargetSize(canvas, targetKb * 1024, { exifSegment });
+    return {
+      blob: result.blob,
+      detail: result.targetMet
+        ? `${(result.blob.size / 1024).toFixed(1)}KB / 品質約${Math.round(result.quality * 100)}`
+        : `品質1でも目標サイズ超過: ${(result.blob.size / 1024).toFixed(1)}KB`
+    };
+  }
+
+  const blob = await encodeCanvas(canvas, type, currentSaveQuality(type), { exifSegment });
+  return { blob, detail: `${(blob.size / 1024).toFixed(1)}KB` };
+}
+
+async function updateDocumentFileHandleAfterSave(handle, type) {
+  const latest = await getFileFromHandle(handle);
+  if (!state.document) return;
+  state.document.fileHandle = handle;
+  state.document.fileName = handle.name || latest.name || state.document.fileName;
+  state.document.sourceFormat = type;
+  state.document.sourceSnapshot = {
+    size: latest.size,
+    lastModified: latest.lastModified
+  };
+  state.markModified(false);
+}
+
+async function overwriteCurrentDocument() {
+  if (!documentReady()) return;
+  const doc = state.document;
+
+  if (!doc.fileHandle) {
+    openSaveDialog();
+    return;
+  }
+
+  const type = writableImageType(doc.sourceFormat, doc.fileName);
+  if (!type) {
+    setMessage("この形式は直接上書きできないため、名前を付けて保存します");
+    openSaveDialog();
+    return;
+  }
+
+  try {
+    const granted = await ensureHandlePermission(doc.fileHandle, { write: true, request: true });
+    if (!granted) {
+      setMessage("上書き保存の書き込み権限が許可されませんでした");
+      return;
+    }
+
+    const latest = await getFileFromHandle(doc.fileHandle);
+    const snapshot = doc.sourceSnapshot;
+    const changedExternally = snapshot && (
+      latest.size !== snapshot.size ||
+      latest.lastModified !== snapshot.lastModified
+    );
+
+    if (
+      changedExternally &&
+      !confirm("このファイルはJTrim Webで開いた後に変更されています。外部の変更を上書きして保存しますか？")
+    ) {
+      setMessage("上書き保存をキャンセルしました");
+      return;
+    }
+
+    state.setBusy(true);
+    setMessage(`${doc.fileName} を上書き保存しています…`);
+    const encoded = await encodeCurrentForSave(type, {
+      preserveExif: true,
+      respectTargetMode: false
+    });
+    await writeBlobToFileHandle(doc.fileHandle, encoded.blob);
+    await updateDocumentFileHandleAfterSave(doc.fileHandle, type);
+    setMessage(`${doc.fileName} を上書き保存しました (${encoded.detail})`);
+  } catch (error) {
+    console.error(error);
+    if (error?.name === "AbortError" || error?.name === "NotAllowedError") {
+      setMessage("上書き保存をキャンセルしました");
+      return;
+    }
+    alert(`上書き保存に失敗しました。\n${error.message || error}`);
+    setMessage("上書き保存に失敗しました");
+  } finally {
+    state.setBusy(false);
+    refreshUI();
+  }
+}
+
 function openSaveDialog() {
   const hasExif = Boolean(state.document?.exifSegment);
   $("#savePreserveExif").disabled = !hasExif;
@@ -3149,36 +3279,50 @@ function setupSaveDialog() {
     event.preventDefault();
     const type = typeSelect.value;
     const baseName = state.document?.fileName || "image";
+    const preserveExif = type === "image/jpeg" && $("#savePreserveExif").checked;
+
+    let targetHandle = null;
+    if (fsCapabilities.saveFilePicker) {
+      try {
+        targetHandle = await pickSaveFileHandle({
+          suggestedName: nameWithTypeExtension(baseName, type),
+          type,
+          id: "jtrim-save"
+        });
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          setMessage("保存をキャンセルしました");
+          return;
+        }
+        console.error(error);
+        alert(`保存先を選択できませんでした。\n${error.message || error}`);
+        return;
+      }
+    }
+
     $("#saveDialog").close();
 
     try {
       state.setBusy(true);
-      if (type === "image/jpeg" && document.querySelector('input[name="jpegMode"]:checked')?.value === "target") {
-        const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
-        setMessage(`JPEGを${targetKb}KB以下に最適化しています…`);
-        const result = await encodeJpegToTargetSize(canvas, targetKb * 1024, {
-          exifSegment: $("#savePreserveExif").checked ? state.document?.exifSegment : null
-        });
-        downloadBlob(result.blob, baseName, "image/jpeg");
-        const actualKb = (result.blob.size / 1024).toFixed(1);
-        const q = Math.round(result.quality * 100);
-        setMessage(
-          result.targetMet
-            ? `JPEGを保存しました: ${actualKb}KB / 品質約${q}`
-            : `品質1でも目標サイズを超えました: ${actualKb}KB`
-        );
+      setMessage("保存ファイルを作成しています…");
+      const encoded = await encodeCurrentForSave(type, {
+        preserveExif,
+        respectTargetMode: true
+      });
+
+      if (targetHandle) {
+        await writeBlobToFileHandle(targetHandle, encoded.blob);
+        await updateDocumentFileHandleAfterSave(targetHandle, type);
+        if (state.document) {
+          state.document.parentDirectoryHandle = null;
+          state.document.workspaceRelativePath = targetHandle.name;
+        }
+        setMessage(`${targetHandle.name} に保存しました (${encoded.detail})`);
       } else {
-        const quality = type === "image/webp"
-          ? Number($("#saveWebpQuality").value) / 100
-          : Number($("#saveQuality").value) / 100;
-        const blob = await saveCanvas(canvas, type, quality, baseName, {
-          exifSegment: type === "image/jpeg" && $("#savePreserveExif").checked
-            ? state.document?.exifSegment
-            : null
-        });
-        setMessage(`保存ファイルを作成しました (${(blob.size / 1024).toFixed(1)}KB)`);
+        downloadBlob(encoded.blob, baseName, type);
+        state.markModified(false);
+        setMessage(`保存ファイルを作成しました (${encoded.detail})`);
       }
-      state.markModified(false);
     } catch (error) {
       console.error(error);
       alert(`保存に失敗しました。\n${error.message || error}`);
@@ -3230,6 +3374,7 @@ function setupKeyboard() {
     let command = null;
 
     if (ctrl && event.shiftKey && key === "a") command = "file.save";
+    else if (ctrl && !event.shiftKey && key === "s") command = "file.overwrite";
     else if (ctrl && event.altKey && key === "t") command = "file.thumbnails";
     else if (ctrl && key === "b") command = "file.batch";
     else if (ctrl && key === "w") command = "file.slideshow";
