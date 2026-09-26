@@ -1017,6 +1017,7 @@
             <label>形式 <select id="batchType"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select></label>
             <label>品質 <input id="batchQuality" type="number" min="1" max="100" value="92">%</label>
             <label class="check-row"><input id="batchPreserveExif" type="checkbox" checked> JPEGのExifを保持</label>
+            <label class="check-row"><input id="batchProgressiveJpeg" type="checkbox"> Progressive JPEG</label>
           </div>
           <div class="batch-output-options">
             <label class="check-row"><input type="radio" name="batchOutputMode" value="zip" checked> ZIPで保存</label>
@@ -1296,6 +1297,7 @@
             <label class="check-row"><input type="radio" name="jpegMode" value="target"> ファイルサイズを指定</label>
             <label class="inline-fields">最大 <input id="saveTargetKb" type="number" min="1" max="100000" value="500"> KB</label>
             <p class="help-text">指定サイズ以下に収まる範囲で、できるだけ高いJPEG品質を二分探索します。</p>
+            <p id="saveJpegCodingStatus" class="help-text">Sequential JPEGで保存</p>
             <label class="check-row"><input id="savePreserveExif" type="checkbox" checked> Exifを保持</label>
             <p id="saveExifStatus" class="help-text">Exif情報なし</p>
           </fieldset>
