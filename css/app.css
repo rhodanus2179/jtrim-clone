@@ -471,3 +471,81 @@ progress {
   .recent-folder-row { grid-template-columns: 1fr; }
   .recent-folder-actions { flex-wrap: wrap; }
 }
+
+
+/* v0.10 print / save / JPEG information */
+.print-host {
+  display: none;
+}
+
+.print-preview-modal {
+  width: min(1000px, calc(100vw - 30px));
+  height: min(860px, calc(100vh - 30px));
+}
+.print-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.print-preview-toolbar .help-text {
+  margin-right: auto;
+}
+.print-preview-area {
+  height: calc(100% - 104px);
+  overflow: auto;
+  display: grid;
+  place-items: start center;
+  padding: 22px;
+  background: #d9dde2;
+}
+.print-preview-page {
+  width: min(680px, 88%);
+  min-width: 260px;
+  display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: white;
+  box-shadow: 0 5px 24px rgba(0,0,0,.25);
+}
+.print-preview-page img {
+  display: block;
+}
+.print-margin-fields.disabled-fields {
+  opacity: .45;
+  pointer-events: none;
+}
+
+.jpeg-info-grid {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.45fr) minmax(180px, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.jpeg-info-label,
+.jpeg-info-value {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.jpeg-info-label {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.jpeg-info-value {
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.jpeg-info-grid > :nth-last-child(-n+2) {
+  border-bottom: 0;
+}
+
+@media print {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+}
