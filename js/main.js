@@ -3,7 +3,7 @@ import { HistoryManager } from "./history.js";
 import { CommandRegistry } from "./commands.js";
 import { SelectionController } from "./selection.js";
 import {
-  createBlankCanvas, decodeFileToCanvas, saveCanvas,
+  createBlankCanvas, decodeFileToCanvas, saveCanvas, encodeCanvas,
   encodeJpegToTargetSize, downloadBlob
 } from "./io/files.js";
 import {
@@ -13,6 +13,7 @@ import {
   grayscale, sepia, invert, drawText
 } from "./engine/operations.js";
 import { ImageWorkerClient } from "./worker/client.js";
+import { createZip } from "./io/zip.js";
 
 const state = new AppState();
 const history = new HistoryManager(16);
@@ -41,6 +42,11 @@ let compositeSourceCanvas = null;
 let histogramResult = null;
 let showTransparency = false;
 let textureSourceCanvas = null;
+let batchFiles = [];
+let galleryItems = [];
+let galleryPendingAction = null;
+let slideshowIndex = 0;
+let slideshowTimer = null;
 
 const selection = new SelectionController({
   canvas,
@@ -283,8 +289,20 @@ function setupCommands() {
       enabled: () => !state.busy
     })
     .register("file.save", {
-      run: () => $("#saveDialog").showModal(),
+      run: openSaveDialog,
       enabled: documentReady
+    })
+    .register("file.thumbnails", {
+      run: () => requestGallery("thumbnails"),
+      enabled: () => !state.busy
+    })
+    .register("file.batch", {
+      run: openBatchDialog,
+      enabled: () => !state.busy
+    })
+    .register("file.slideshow", {
+      run: () => requestGallery("slideshow"),
+      enabled: () => !state.busy
     })
     .register("edit.undo", {
       enabled: () => documentReady() && history.canUndo,
@@ -2422,6 +2440,315 @@ function setupCustomFilterDialog() {
   $("#customFilterDialog").addEventListener("cancel", hidePreview);
 }
 
+
+function outputExtension(type) {
+  return type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
+}
+
+function baseNameOf(name) {
+  return String(name || "image").replace(/\.[^.]+$/, "") || "image";
+}
+
+function uniqueOutputName(fileName, type, usedNames) {
+  const ext = outputExtension(type);
+  const base = baseNameOf(fileName);
+  let candidate = `${base}.${ext}`;
+  let index = 2;
+  while (usedNames.has(candidate.toLowerCase())) {
+    candidate = `${base}_${index++}.${ext}`;
+  }
+  usedNames.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function computeBatchTarget(width, height, targetWidth, targetHeight, keepAspect) {
+  targetWidth = Math.max(1, Math.round(Number(targetWidth) || width));
+  targetHeight = Math.max(1, Math.round(Number(targetHeight) || height));
+  if (!keepAspect) return { width: targetWidth, height: targetHeight };
+  const scale = Math.min(targetWidth / width, targetHeight / height);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
+}
+
+function openBatchDialog() {
+  $("#batchFileCount").textContent = `${batchFiles.length}ファイル`;
+  $("#batchProgress").value = 0;
+  $("#batchStatus").textContent = batchFiles.length ? "設定を確認して変換を開始してください。" : "ファイルを選択してください。";
+  $("#batchDialog").showModal();
+}
+
+async function processBatchFile(file, options) {
+  const workCanvas = document.createElement("canvas");
+  const meta = await decodeFileToCanvas(file, workCanvas);
+  const ctx = workCanvas.getContext("2d", { willReadFrequently: true });
+
+  if (options.resize) {
+    const target = computeBatchTarget(
+      workCanvas.width, workCanvas.height,
+      options.width, options.height,
+      options.keepAspect
+    );
+    if (target.width !== workCanvas.width || target.height !== workCanvas.height) {
+      const source = ctx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+      const result = await imageWorker.run("resize", source, {
+        width: target.width,
+        height: target.height,
+        method: options.resizeMethod,
+        resample: true
+      });
+      workCanvas.width = result.width;
+      workCanvas.height = result.height;
+      workCanvas.getContext("2d", { willReadFrequently: true }).putImageData(result, 0, 0);
+    }
+  }
+
+  if (options.grayscale) {
+    const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+    const source = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+    const result = await imageWorker.run("grayscale", source, {});
+    currentCtx.putImageData(result, 0, 0);
+  }
+
+  if (options.brightness !== 0 || options.contrast !== 0) {
+    const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+    const source = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+    const result = await imageWorker.run("brightnessContrast", source, {
+      brightness: options.brightness,
+      contrast: options.contrast
+    });
+    currentCtx.putImageData(result, 0, 0);
+  }
+
+  return await encodeCanvas(workCanvas, options.type, options.quality, {
+    exifSegment: options.type === "image/jpeg" && options.preserveExif ? meta.exifSegment : null
+  });
+}
+
+function setupBatchDialog() {
+  $("#batchChooseFiles").addEventListener("click", () => $("#batchFileInput").click());
+  $("#batchFileInput").addEventListener("change", event => {
+    batchFiles = [...(event.target.files || [])].filter(file => file.type.startsWith("image/"));
+    $("#batchFileCount").textContent = `${batchFiles.length}ファイル`;
+    $("#batchStatus").textContent = batchFiles.length ? "設定を確認して変換を開始してください。" : "画像ファイルがありません。";
+    event.target.value = "";
+  });
+
+  $("#batchStart").addEventListener("click", async () => {
+    if (!batchFiles.length) {
+      $("#batchFileInput").click();
+      return;
+    }
+
+    const options = {
+      type: $("#batchType").value,
+      quality: Math.max(.01, Math.min(1, Number($("#batchQuality").value) / 100)),
+      preserveExif: $("#batchPreserveExif").checked,
+      resize: $("#batchResize").checked,
+      width: Number($("#batchWidth").value),
+      height: Number($("#batchHeight").value),
+      keepAspect: $("#batchKeepAspect").checked,
+      resizeMethod: $("#batchResizeMethod").value,
+      grayscale: $("#batchGrayscale").checked,
+      brightness: Number($("#batchBrightness").value) || 0,
+      contrast: Number($("#batchContrast").value) || 0
+    };
+
+    const startButton = $("#batchStart");
+    startButton.disabled = true;
+    const entries = [];
+    const usedNames = new Set();
+
+    try {
+      for (let i = 0; i < batchFiles.length; i++) {
+        const file = batchFiles[i];
+        $("#batchStatus").textContent = `${i + 1} / ${batchFiles.length}: ${file.name} を変換中…`;
+        $("#batchProgress").value = i / batchFiles.length * 90;
+        const blob = await processBatchFile(file, options);
+        entries.push({
+          name: uniqueOutputName(file.name, options.type, usedNames),
+          blob
+        });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
+      $("#batchStatus").textContent = "ZIPを作成しています…";
+      $("#batchProgress").value = 94;
+      const zip = await createZip(entries);
+      $("#batchProgress").value = 100;
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      downloadBlob(zip, `jtrim-batch-${stamp}`, "application/zip");
+      $("#batchStatus").textContent = `${entries.length}ファイルの変換が完了しました。ZIP: ${(zip.size / 1024 / 1024).toFixed(1)}MB`;
+    } catch (error) {
+      console.error(error);
+      $("#batchStatus").textContent = `一括変換に失敗しました: ${error.message || error}`;
+      alert(`一括変換に失敗しました。\n${error.message || error}`);
+    } finally {
+      startButton.disabled = false;
+    }
+  });
+}
+
+function clearGallery() {
+  stopSlideshow();
+  for (const item of galleryItems) URL.revokeObjectURL(item.url);
+  galleryItems = [];
+  slideshowIndex = 0;
+}
+
+function setGalleryFiles(files) {
+  clearGallery();
+  galleryItems = [...files]
+    .filter(file => file.type.startsWith("image/"))
+    .sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }))
+    .map(file => ({ file, url: URL.createObjectURL(file) }));
+  slideshowIndex = 0;
+}
+
+function requestGallery(action) {
+  if (!galleryItems.length) {
+    galleryPendingAction = action;
+    $("#galleryFileInput").click();
+    return;
+  }
+  if (action === "slideshow") openSlideshow();
+  else openThumbnails();
+}
+
+function renderThumbnails() {
+  const grid = $("#thumbnailGrid");
+  grid.replaceChildren();
+  $("#galleryCount").textContent = `${galleryItems.length}ファイル`;
+
+  for (const [index, item] of galleryItems.entries()) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "thumbnail-item";
+    button.title = item.file.name;
+
+    const img = document.createElement("img");
+    img.src = item.url;
+    img.alt = item.file.name;
+    img.loading = "lazy";
+    img.decoding = "async";
+
+    const name = document.createElement("span");
+    name.textContent = item.file.name;
+
+    button.append(img, name);
+    button.addEventListener("click", async () => {
+      $("#thumbnailDialog").close();
+      await loadFile(item.file);
+    });
+    button.addEventListener("dblclick", () => {
+      slideshowIndex = index;
+      $("#thumbnailDialog").close();
+      openSlideshow();
+    });
+    grid.append(button);
+  }
+}
+
+function openThumbnails() {
+  renderThumbnails();
+  $("#thumbnailDialog").showModal();
+}
+
+function showSlide(index) {
+  if (!galleryItems.length) {
+    $("#slideshowImage").hidden = true;
+    $("#slideshowEmpty").hidden = false;
+    $("#slideshowName").textContent = "—";
+    $("#slideshowPosition").textContent = "0 / 0";
+    return;
+  }
+  slideshowIndex = (index + galleryItems.length) % galleryItems.length;
+  const item = galleryItems[slideshowIndex];
+  $("#slideshowImage").hidden = false;
+  $("#slideshowEmpty").hidden = true;
+  $("#slideshowImage").src = item.url;
+  $("#slideshowImage").alt = item.file.name;
+  $("#slideshowName").textContent = item.file.name;
+  $("#slideshowPosition").textContent = `${slideshowIndex + 1} / ${galleryItems.length}`;
+}
+
+function stopSlideshow() {
+  if (slideshowTimer) clearInterval(slideshowTimer);
+  slideshowTimer = null;
+  const play = $("#slideshowPlay");
+  if (play) play.textContent = "▶ 再生";
+}
+
+function startSlideshow() {
+  stopSlideshow();
+  const seconds = Math.max(1, Number($("#slideshowInterval").value) || 3);
+  slideshowTimer = setInterval(() => showSlide(slideshowIndex + 1), seconds * 1000);
+  $("#slideshowPlay").textContent = "⏸ 停止";
+}
+
+function toggleSlideshow() {
+  if (slideshowTimer) stopSlideshow();
+  else startSlideshow();
+}
+
+function openSlideshow() {
+  showSlide(slideshowIndex);
+  if (!$("#slideshowDialog").open) $("#slideshowDialog").showModal();
+}
+
+function setupGallery() {
+  $("#galleryFileInput").addEventListener("change", event => {
+    const files = event.target.files || [];
+    setGalleryFiles(files);
+    event.target.value = "";
+    const action = galleryPendingAction || "thumbnails";
+    galleryPendingAction = null;
+    if (action === "slideshow") openSlideshow();
+    else openThumbnails();
+  });
+
+  $("#galleryChooseFiles").addEventListener("click", () => {
+    galleryPendingAction = "thumbnails";
+    $("#galleryFileInput").click();
+  });
+  $("#slideshowFiles").addEventListener("click", () => {
+    galleryPendingAction = "slideshow";
+    $("#galleryFileInput").click();
+  });
+  $("#slideshowPrev").addEventListener("click", () => showSlide(slideshowIndex - 1));
+  $("#slideshowNext").addEventListener("click", () => showSlide(slideshowIndex + 1));
+  $("#slideshowPlay").addEventListener("click", toggleSlideshow);
+  $("#slideshowInterval").addEventListener("change", () => {
+    if (slideshowTimer) startSlideshow();
+  });
+  $("#slideshowClose").addEventListener("click", () => $("#slideshowDialog").close());
+  $("#slideshowDialog").addEventListener("close", stopSlideshow);
+  $("#slideshowDialog").addEventListener("cancel", stopSlideshow);
+  $("#slideshowDialog").addEventListener("keydown", event => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      showSlide(slideshowIndex - 1);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      showSlide(slideshowIndex + 1);
+    } else if (event.code === "Space") {
+      event.preventDefault();
+      toggleSlideshow();
+    }
+  });
+}
+
+function openSaveDialog() {
+  const hasExif = Boolean(state.document?.exifSegment);
+  $("#savePreserveExif").disabled = !hasExif;
+  $("#savePreserveExif").checked = hasExif;
+  $("#saveExifStatus").textContent = hasExif
+    ? "元JPEGのExifを保持できます（Orientationは1に正規化し、画像サイズタグを更新します）。"
+    : "保持できるExif情報はありません。";
+  $("#saveDialog").showModal();
+}
+
 function setupSaveDialog() {
   const typeSelect = $("#saveType");
   const updateSaveOptions = () => {
@@ -2450,7 +2777,9 @@ function setupSaveDialog() {
       if (type === "image/jpeg" && document.querySelector('input[name="jpegMode"]:checked')?.value === "target") {
         const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
         setMessage(`JPEGを${targetKb}KB以下に最適化しています…`);
-        const result = await encodeJpegToTargetSize(canvas, targetKb * 1024);
+        const result = await encodeJpegToTargetSize(canvas, targetKb * 1024, {
+          exifSegment: $("#savePreserveExif").checked ? state.document?.exifSegment : null
+        });
         downloadBlob(result.blob, baseName, "image/jpeg");
         const actualKb = (result.blob.size / 1024).toFixed(1);
         const q = Math.round(result.quality * 100);
@@ -2463,7 +2792,11 @@ function setupSaveDialog() {
         const quality = type === "image/webp"
           ? Number($("#saveWebpQuality").value) / 100
           : Number($("#saveQuality").value) / 100;
-        const blob = await saveCanvas(canvas, type, quality, baseName);
+        const blob = await saveCanvas(canvas, type, quality, baseName, {
+          exifSegment: type === "image/jpeg" && $("#savePreserveExif").checked
+            ? state.document?.exifSegment
+            : null
+        });
         setMessage(`保存ファイルを作成しました (${(blob.size / 1024).toFixed(1)}KB)`);
       }
     } catch (error) {
@@ -2517,6 +2850,9 @@ function setupKeyboard() {
     let command = null;
 
     if (ctrl && event.shiftKey && key === "a") command = "file.save";
+    else if (ctrl && event.altKey && key === "t") command = "file.thumbnails";
+    else if (ctrl && key === "b") command = "file.batch";
+    else if (ctrl && key === "w") command = "file.slideshow";
     else if (ctrl && key === "n") command = "file.new";
     else if (ctrl && key === "o") command = "file.open";
     else if (ctrl && key === "z") command = "edit.undo";
@@ -2609,6 +2945,8 @@ setupCustomFilterDialog();
 setupTextDialog();
 setupNewDialog();
 setupSaveDialog();
+setupBatchDialog();
+setupGallery();
 setupFileInput();
 setupZoom();
 setupKeyboard();
