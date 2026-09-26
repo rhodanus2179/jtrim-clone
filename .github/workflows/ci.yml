@@ -17,6 +17,8 @@ jobs:
         run: find js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Check worker module imports
         run: node --input-type=module -e "globalThis.self={}; await import('./js/worker/image-worker.js')"
+      - name: Check IO module imports
+        run: node --input-type=module -e "await import('./js/io/files.js'); await import('./js/io/jpeg-exif.js'); await import('./js/io/zip.js')"
       - name: Check required entry files
         run: |
           test -f index.html
