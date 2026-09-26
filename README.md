@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.11.3）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.11.4）まで進んでいます。
 
 ### 実装済み
 
@@ -192,6 +192,12 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - 元JPEGの4:4:4 / 4:2:2 / 4:2:0 / 4:4:0 / grayscaleを高度エンコード時に維持
   - jpegtran / cjpeg / libspngをWorkerでlazy-load
   - 再現可能なGitHub Actions codec buildとthird-party notices
+- フッター再設計
+  - ファイル / サイズ / 座標 / 色 / 選択 / ズーム / メッセージを優先度付きで再配置
+  - HEXを主表示し、RGB・Alphaと色見本スウォッチを併記
+  - 色表示をクリックするとHEXをクリップボードへコピー
+  - 狭い画面では選択情報・画像サイズから段階的に省略し、色と座標は維持
+  - 処理メッセージをaria-liveで通知し、長文はツールチップで確認可能
 - ダイアログのviewport対応
   - 画面高 / Visual Viewportに合わせて最大高さを調整
   - ヘッダとOK / キャンセルを固定し、本文だけスクロール
