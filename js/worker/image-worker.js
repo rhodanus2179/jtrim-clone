@@ -1,6 +1,6 @@
 import { nearestNeighborResize, resizeImageData } from "../engine/resample.js";
 import {
-  brightnessContrastImageData, gaussianBlurImageData,
+  grayscaleImageData, brightnessContrastImageData, gaussianBlurImageData,
   gammaImageData, rgbAdjustImageData, hsvAdjustImageData,
   sharpenImageData, mosaicImageData,
   posterizeImageData, solarizeImageData, thresholdImageData,
@@ -31,6 +31,9 @@ self.onmessage = event => {
         result = params.resample === false
           ? nearestNeighborResize(source, params.width, params.height)
           : resizeImageData(source, params.width, params.height, params.method);
+        break;
+      case "grayscale":
+        result = grayscaleImageData(source, params.selection);
         break;
       case "brightnessContrast":
         result = brightnessContrastImageData(source, params.brightness, params.contrast, params.selection);
