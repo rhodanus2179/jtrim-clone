@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.7.0）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.8.0）まで進んでいます。
 
 ### 実装済み
 
@@ -127,6 +127,21 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - 前 / 次 / 自動再生
   - 2 / 3 / 5 / 10秒
   - 左右キー / Space操作
+- File System Access対応（対応ブラウザ）
+  - 「フォルダを開く」
+  - フォルダ型サムネイル
+  - breadcrumbによるサブフォルダ移動
+  - 名前 / 更新日時 / サイズ / 種類で並び替え
+  - ファイル名検索 / 画像のみフィルタ
+  - 可視領域付近だけサムネイルを読み込むlazy loading
+  - フォルダから開いた画像をCtrl+Sで直接上書き
+  - File System Access版「名前を付けて保存」
+  - 外部変更（size / lastModified）検出
+  - 一括変換をconvertedサブフォルダまたは任意フォルダへ直接保存
+  - 同名時の連番 / スキップ / 上書き
+  - IndexedDBによる最近使ったフォルダ最大10件
+  - 権限切れ時の再接続
+  - 非対応ブラウザでは従来のFile input / download / ZIPへフォールバック
 - Undo / Redo（16段階を基本）
 - JTrim準拠の主要ショートカット
 - GitHub Actions による JavaScript 構文チェック
