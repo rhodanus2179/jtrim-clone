@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.10.0）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.11.0）まで進んでいます。
 
 ### 実装済み
 
@@ -181,6 +181,17 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - 推定品質
   - サンプリング
   - Exif / ICC / DQT / Restart Interval
+- 高度JPEG / PNGコーデック
+  - libjpeg-turboベースのJPEGロスレス回転 / 反転
+  - partial MCU時のperfect判定 / trim選択
+  - Exif Orientationを画面上の見え方と合成して正規化
+  - Progressive / Sequential JPEG切替（Ctrl+I）
+  - Adam7 Interlaced PNG
+  - 保存 / 目標ファイルサイズ / 一括変換へ統合
+  - 未編集JPEGはDCT再量子化なしでProgressive / Sequentialを変換
+  - 元JPEGの4:4:4 / 4:2:2 / 4:2:0 / 4:4:0 / grayscaleを高度エンコード時に維持
+  - jpegtran / cjpeg / libspngをWorkerでlazy-load
+  - 再現可能なGitHub Actions codec buildとthird-party notices
 - アンドゥ / リドゥ履歴の明示クリア
 - 内部 / システムクリップボードの明示クリア
 - Undo / Redo（16段階を基本）
