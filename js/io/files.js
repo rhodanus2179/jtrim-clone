@@ -75,8 +75,10 @@ export async function encodeJpegToTargetSize(canvas, targetBytes, {
   targetBytes = Math.max(1, Math.round(Number(targetBytes) || 1));
 
   const encodeCandidate = async quality => {
-    const blob = await encodeCandidate(quality);
-    return exifSegment ? await injectExif(blob, exifSegment, canvas.width, canvas.height) : blob;
+    const blob = await canvasToBlob(source, "image/jpeg", quality);
+    return exifSegment
+      ? await injectExif(blob, exifSegment, canvas.width, canvas.height)
+      : blob;
   };
 
   const minimum = await encodeCandidate(minQuality);
@@ -96,7 +98,7 @@ export async function encodeJpegToTargetSize(canvas, targetBytes, {
 
   for (let i = 0; i < iterations; i++) {
     const quality = (low + high) / 2;
-    const blob = await canvasToBlob(source, "image/jpeg", quality);
+    const blob = await encodeCandidate(quality);
     if (blob.size <= targetBytes) {
       low = quality;
       bestBlob = blob;
