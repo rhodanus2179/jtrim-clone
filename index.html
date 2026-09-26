@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.6.0</span>
+          <span class="version">v0.7.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -27,6 +27,10 @@
             <button data-command="file.open">開く(O)… <kbd>Ctrl+O</kbd></button>
             <hr>
             <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Shift+A</kbd></button>
+            <hr>
+            <button data-command="file.thumbnails">サムネイル表示(T) <kbd>Ctrl+Alt+T</kbd></button>
+            <button data-command="file.batch">一括変換(B)… <kbd>Ctrl+B</kbd></button>
+            <button data-command="file.slideshow">スライドショー(W)… <kbd>Ctrl+W</kbd></button>
           </div>
         </div>
         <div class="menu">
@@ -230,6 +234,8 @@
   <input id="joinFileInput" type="file" accept="image/*" hidden>
   <input id="compositeFileInput" type="file" accept="image/*" hidden>
   <input id="textureFileInput" type="file" accept="image/*" hidden>
+  <input id="batchFileInput" type="file" accept="image/*" multiple hidden>
+  <input id="galleryFileInput" type="file" accept="image/*" multiple hidden>
 
   <dialog id="newDialog" class="modal">
     <form method="dialog" id="newForm">
@@ -962,6 +968,84 @@
     </form>
   </dialog>
 
+
+  <dialog id="batchDialog" class="modal wide-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>一括変換</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields">
+          <button type="button" id="batchChooseFiles">画像を選択</button>
+          <strong id="batchFileCount">0ファイル</strong>
+        </div>
+        <fieldset>
+          <legend>出力</legend>
+          <div class="inline-fields">
+            <label>形式 <select id="batchType"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select></label>
+            <label>品質 <input id="batchQuality" type="number" min="1" max="100" value="92">%</label>
+            <label class="check-row"><input id="batchPreserveExif" type="checkbox" checked> JPEGのExifを保持</label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend><label class="check-row"><input id="batchResize" type="checkbox"> リサイズ</label></legend>
+          <div class="inline-fields">
+            <label>横 <input id="batchWidth" type="number" min="1" max="30000" value="1920"> px</label>
+            <label>縦 <input id="batchHeight" type="number" min="1" max="30000" value="1080"> px</label>
+            <label class="check-row"><input id="batchKeepAspect" type="checkbox" checked> 縦横比保持（指定枠内に収める）</label>
+          </div>
+          <label>再サンプリング
+            <select id="batchResizeMethod">
+              <option value="box">Box</option><option value="hermite">Hermite</option><option value="triangle">Triangle</option>
+              <option value="bell">Bell</option><option value="mitchell">Mitchell</option><option value="bspline">BSpline</option>
+              <option value="lanczos3" selected>Lanczos3</option>
+            </select>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>補正</legend>
+          <label class="check-row"><input id="batchGrayscale" type="checkbox"> グレースケール</label>
+          <div class="inline-fields">
+            <label>明るさ <input id="batchBrightness" type="number" min="-100" max="100" value="0"></label>
+            <label>コントラスト <input id="batchContrast" type="number" min="-100" max="100" value="0"></label>
+          </div>
+        </fieldset>
+        <progress id="batchProgress" max="100" value="0" style="width:100%"></progress>
+        <p id="batchStatus" class="help-text">ファイルを選択してください。</p>
+        <p class="help-text">処理は1ファイルずつ行い、結果をZIPにまとめます。画像データは外部へ送信されません。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">閉じる</button><button type="button" class="primary" id="batchStart">変換してZIP保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="thumbnailDialog" class="modal gallery-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>サムネイル表示</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body gallery-body">
+        <div class="inline-fields">
+          <button type="button" id="galleryChooseFiles">画像を選び直す</button>
+          <span id="galleryCount" class="help-text">0ファイル</span>
+        </div>
+        <div id="thumbnailGrid" class="thumbnail-grid"></div>
+      </div>
+      <div class="dialog-actions"><button class="primary" value="default">閉じる</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="slideshowDialog" class="modal slideshow-modal">
+    <div class="dialog-head"><h2>スライドショー</h2><button id="slideshowClose" class="icon-button" aria-label="閉じる">×</button></div>
+    <div class="slideshow-stage">
+      <img id="slideshowImage" alt="">
+      <div id="slideshowEmpty" class="help-text">画像がありません。</div>
+    </div>
+    <div class="slideshow-caption"><span id="slideshowName">—</span><span id="slideshowPosition">0 / 0</span></div>
+    <div class="dialog-actions slideshow-controls">
+      <button type="button" id="slideshowFiles">画像を選ぶ</button>
+      <button type="button" id="slideshowPrev">◀ 前</button>
+      <button type="button" id="slideshowPlay">▶ 再生</button>
+      <button type="button" id="slideshowNext">次 ▶</button>
+      <label>間隔 <select id="slideshowInterval"><option value="2">2秒</option><option value="3" selected>3秒</option><option value="5">5秒</option><option value="10">10秒</option></select></label>
+    </div>
+  </dialog>
+
   <dialog id="saveDialog" class="modal">
     <form method="dialog">
       <div class="dialog-head"><h2>名前を付けて保存</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
@@ -977,6 +1061,8 @@
             <label class="check-row"><input type="radio" name="jpegMode" value="target"> ファイルサイズを指定</label>
             <label class="inline-fields">最大 <input id="saveTargetKb" type="number" min="1" max="100000" value="500"> KB</label>
             <p class="help-text">指定サイズ以下に収まる範囲で、できるだけ高いJPEG品質を二分探索します。</p>
+            <label class="check-row"><input id="savePreserveExif" type="checkbox" checked> Exifを保持</label>
+            <p id="saveExifStatus" class="help-text">Exif情報なし</p>
           </fieldset>
         </div>
         <div id="genericQualityRow" hidden>
@@ -991,7 +1077,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.6.0</strong></p>
+        <p><strong>JTrim Web v0.7.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
