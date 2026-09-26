@@ -94,7 +94,8 @@ async function runCjpeg(rgbaBuffer, width, height, {
     "420": "2x2,1x1,1x1",
     "440": "1x2,1x1,1x1"
   };
-  if (sampleMap[subsampling]) args.push("-sample", sampleMap[subsampling]);
+  if (subsampling === "gray") args.push("-grayscale");
+  else if (sampleMap[subsampling]) args.push("-sample", sampleMap[subsampling]);
   if (progressive) args.push("-progressive");
   if (optimize) args.push("-optimize");
   args.push("-outfile", "/output.jpg", "/input.ppm");
