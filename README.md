@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.11.4）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.11.5）まで進んでいます。
 
 ### 実装済み
 
@@ -185,13 +185,19 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - libjpeg-turboベースのJPEGロスレス回転 / 反転
   - partial MCU時のperfect判定 / trim選択
   - Exif Orientationを画面上の見え方と合成して正規化
-  - Progressive / Sequential JPEG切替（Ctrl+I）
+  - Progressive / Sequential JPEG切替（Ctrl+Alt+I）
   - Adam7 Interlaced PNG
   - 保存 / 目標ファイルサイズ / 一括変換へ統合
   - 未編集JPEGはDCT再量子化なしでProgressive / Sequentialを変換
   - 元JPEGの4:4:4 / 4:2:2 / 4:2:0 / 4:4:0 / grayscaleを高度エンコード時に維持
   - jpegtran / cjpeg / libspngをWorkerでlazy-load
   - 再現可能なGitHub Actions codec buildとthird-party notices
+- ブラウザ衝突ショートカット整理
+  - Ctrl+T / W / U / F / J / R / N / O / B / G などブラウザ予約操作をアプリ側で横取りしない
+  - JTrim由来の該当操作は Ctrl+Alt 系へ移行
+  - 画像ズームは + / - に変更し、ブラウザ表示倍率の Ctrl++ / Ctrl+- と分離
+  - Ctrl+Z / Y / C / V / X / A / S / P など自然なWebアプリ操作は維持
+  - ショートカット定義を一元化し、Macではメニュー表示を⌘ / ⌥へ自動変換
 - フッター再設計
   - ファイル / サイズ / 座標 / 色 / 選択 / ズーム / メッセージを優先度付きで再配置
   - HEXを主表示し、RGB・Alphaと色見本スウォッチを併記
