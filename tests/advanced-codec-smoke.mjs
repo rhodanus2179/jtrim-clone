@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import createJpegtran from "../js/codecs/generated/jpegtran-module.js";
+import createCjpeg from "../js/codecs/generated/cjpeg-module.js";
 import { parseJpegInfo } from "../js/io/jpeg-info.js";
 import {
   composeJpegTransform,
@@ -33,7 +34,7 @@ assert.equal(composeJpegTransform("rotate90", 6), "rotate180");
 assert.equal(composeJpegTransform("identity", 8), "rotate270");
 assert.deepEqual(jpegtranArgumentsForOperation("flipH"), ["-flip", "horizontal"]);
 
-const rotated = await runJpegtran(["-copy", "all", "-perfect", "-rotate", "90"]);
+const rotated = await runJpegtran(["-copy", "all", "-maxmemory", "512m", "-maxscans", "100", "-perfect", "-rotate", "90"]);
 const rotatedInfo = await parseJpegInfo(new Blob([rotated.bytes], { type: "image/jpeg" }));
 assert.ok(rotatedInfo);
 assert.equal(rotatedInfo.width, 8);
@@ -46,5 +47,26 @@ assert.ok(progressiveInfo);
 assert.equal(progressiveInfo.width, 16);
 assert.equal(progressiveInfo.height, 8);
 assert.equal(progressiveInfo.progressive, true);
+
+const cjpeg = await createCjpeg({ noInitialRun: true, print: () => {}, printErr: () => {} });
+const width = 7;
+const height = 5;
+const header = Buffer.from(`P6\n${width} ${height}\n255\n`);
+const rgb = Buffer.alloc(width * height * 3);
+for (let y = 0; y < height; y++) {
+  for (let x = 0; x < width; x++) {
+    const i = (y * width + x) * 3;
+    rgb[i] = x * 31;
+    rgb[i + 1] = y * 47;
+    rgb[i + 2] = (x + y) * 19;
+  }
+}
+cjpeg.FS.writeFile("/input.ppm", Buffer.concat([header, rgb]));
+cjpeg.callMain(["-quality", "88", "-progressive", "-optimize", "-outfile", "/progressive.jpg", "/input.ppm"]);
+const cjpegBytes = cjpeg.FS.readFile("/progressive.jpg");
+const cjpegInfo = await parseJpegInfo(new Blob([cjpegBytes], { type: "image/jpeg" }));
+assert.equal(cjpegInfo.width, width);
+assert.equal(cjpegInfo.height, height);
+assert.equal(cjpegInfo.progressive, true);
 
 console.log("Advanced JPEG codec smoke tests passed");
