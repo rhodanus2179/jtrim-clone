@@ -2720,6 +2720,10 @@ function updateBatchOutputAvailability() {
 
   const recursive = $("#batchRecursive");
   const preserve = $("#batchPreserveStructure");
+  const progressive = $("#batchProgressiveJpeg");
+  if (progressive) {
+    progressive.disabled = $("#batchType").value !== "image/jpeg";
+  }
   if (recursive) recursive.disabled = batchSourceMode !== "workspace" || !folderWorkspace.active;
   if (preserve) preserve.disabled = !(recursive?.checked && batchSourceMode === "workspace");
 
@@ -2737,6 +2741,7 @@ function updateBatchOutputAvailability() {
 
 function openBatchDialog() {
   $("#batchUseWorkspace").hidden = !folderWorkspace.active;
+  $("#batchProgressiveJpeg").checked = getCodecOptions().interlaceProgressive;
   if (folderWorkspace.active && (batchSourceMode === "workspace" || !batchItems.length)) {
     batchItems = batchItemsFromWorkspace();
     batchSourceMode = "workspace";
@@ -2810,9 +2815,21 @@ async function processBatchFile(file, options) {
     });
   }
 
-  return await encodeCanvas(workCanvas, options.type, options.quality, {
-    exifSegment: options.type === "image/jpeg" && options.preserveExif ? meta.exifSegment : null
-  });
+  const exifSegment = options.type === "image/jpeg" && options.preserveExif ? meta.exifSegment : null;
+  if (options.type === "image/jpeg" && options.progressiveJpeg) {
+    const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+    const imageData = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+    const encoded = await codecClient.jpegEncode(imageData, {
+      quality: Math.round(options.quality * 100),
+      progressive: true,
+      optimize: true
+    });
+    return exifSegment
+      ? await injectExif(encoded.blob, exifSegment, workCanvas.width, workCanvas.height)
+      : encoded.blob;
+  }
+
+  return await encodeCanvas(workCanvas, options.type, options.quality, { exifSegment });
 }
 
 async function getBatchItemFile(item) {
@@ -2926,6 +2943,7 @@ function setupBatchDialog() {
   document.querySelectorAll('input[name="batchOutputMode"]').forEach(input => {
     input.addEventListener("change", updateBatchOutputAvailability);
   });
+  $("#batchType").addEventListener("change", updateBatchOutputAvailability);
   $("#batchRecursive").addEventListener("change", () => {
     updateBatchSourceLabel();
     updateBatchOutputAvailability();
@@ -2941,6 +2959,7 @@ function setupBatchDialog() {
       type: $("#batchType").value,
       quality: Math.max(.01, Math.min(1, Number($("#batchQuality").value) / 100)),
       preserveExif: $("#batchPreserveExif").checked,
+      progressiveJpeg: $("#batchType").value === "image/jpeg" && $("#batchProgressiveJpeg").checked,
       resize: $("#batchResize").checked,
       width: Number($("#batchWidth").value),
       height: Number($("#batchHeight").value),
