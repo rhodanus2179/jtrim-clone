@@ -562,8 +562,14 @@ progress {
   max-height: none;
   border-radius: 0;
 }
+.slideshow-modal:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  max-height: none;
+}
 .slideshow-modal:fullscreen .slideshow-stage {
-  height: calc(100vh - 126px);
+  height: auto;
+  min-height: 0;
 }
 
 @media (max-width: 720px) {
