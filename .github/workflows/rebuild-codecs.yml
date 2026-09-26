@@ -74,6 +74,7 @@ jobs:
             -sSINGLE_FILE=1 -sMODULARIZE=1 -sEXPORT_ES6=1 \
             -sENVIRONMENT=web,worker,node -sALLOW_MEMORY_GROWTH=1 \
             -sEXPORTED_FUNCTIONS='["_malloc","_free","_jtrim_png_encode","_jtrim_png_output_ptr","_jtrim_png_output_size","_jtrim_png_free_output"]' \
+            -sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
             -o "$GITHUB_WORKSPACE/js/codecs/generated/png-codec-module.js"
           printf '\n// Generated from bundled libspng 0.7.4 + zlib by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/png-codec-module.js"
 
