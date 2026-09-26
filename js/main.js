@@ -72,6 +72,7 @@ let histogramResult = null;
 let showTransparency = false;
 let textureSourceCanvas = null;
 let batchItems = [];
+let batchSourceMode = "legacy";
 let galleryItems = [];
 let galleryPendingAction = null;
 let slideshowIndex = 0;
@@ -2539,13 +2540,39 @@ function batchItemsFromWorkspace() {
     .map(entry => ({
       name: entry.name,
       handle: entry.handle,
+      parentHandle: folderWorkspace.currentHandle,
+      relativePath: entry.name,
+      file: null
+    }));
+}
+
+async function collectBatchWorkspaceItems({ recursive = false, excludeHandles = [] } = {}) {
+  if (!folderWorkspace.active) return [];
+  if (!recursive) return batchItemsFromWorkspace();
+
+  const entries = await walkDirectory(folderWorkspace.currentHandle, {
+    recursive: true,
+    imageOnly: true,
+    excludeHandles,
+    maxFiles: 20000
+  });
+  return entries
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath, "ja", { numeric: true }))
+    .map(entry => ({
+      name: entry.name,
+      handle: entry.handle,
+      parentHandle: entry.parentHandle,
+      relativePath: entry.relativePath,
       file: null
     }));
 }
 
 function updateBatchSourceLabel() {
-  $("#batchFileCount").textContent = `${batchItems.length}ファイル`;
-  $("#batchStatus").textContent = batchItems.length
+  const recursive = $("#batchRecursive")?.checked && batchSourceMode === "workspace";
+  $("#batchFileCount").textContent = recursive && folderWorkspace.active
+    ? "サブフォルダを含めて実行時に列挙"
+    : `${batchItems.length}ファイル`;
+  $("#batchStatus").textContent = batchItems.length || (recursive && folderWorkspace.active)
     ? "設定を確認して変換を開始してください。"
     : "ファイルを選択してください。";
 }
@@ -2557,6 +2584,11 @@ function updateBatchOutputAvailability() {
   subfolderRadio.disabled = !supported || !folderWorkspace.active;
   folderRadio.disabled = !supported;
 
+  const recursive = $("#batchRecursive");
+  const preserve = $("#batchPreserveStructure");
+  if (recursive) recursive.disabled = batchSourceMode !== "workspace" || !folderWorkspace.active;
+  if (preserve) preserve.disabled = !(recursive?.checked && batchSourceMode === "workspace");
+
   const selected = document.querySelector('input[name="batchOutputMode"]:checked');
   if (selected?.disabled) {
     document.querySelector('input[name="batchOutputMode"][value="zip"]').checked = true;
@@ -2565,7 +2597,7 @@ function updateBatchOutputAvailability() {
   $("#batchOutputHint").textContent = !supported
     ? "このブラウザでは直接フォルダ出力を利用できないため、ZIPで保存します。"
     : folderWorkspace.active
-      ? `現在のフォルダ: ${folderWorkspace.pathLabel}。直接出力では書き込み時に許可を求めます。`
+      ? `現在のフォルダ: ${folderWorkspace.pathLabel}。再帰変換時は出力フォルダ自身を対象から除外します。`
       : "フォルダを開くと converted サブフォルダへ直接出力できます。任意の出力フォルダ選択は利用できます。";
 }
 
@@ -2573,11 +2605,19 @@ function openBatchDialog() {
   $("#batchUseWorkspace").hidden = !folderWorkspace.active;
   if (folderWorkspace.active && !batchItems.length) {
     batchItems = batchItemsFromWorkspace();
+    batchSourceMode = "workspace";
   }
   updateBatchSourceLabel();
   updateBatchOutputAvailability();
   $("#batchProgress").value = 0;
   $("#batchDialog").showModal();
+}
+
+async function applyBatchWorkerEffect(workCanvas, operation, params = {}) {
+  const ctx = workCanvas.getContext("2d", { willReadFrequently: true });
+  const source = ctx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+  const result = await imageWorker.run(operation, source, params);
+  ctx.putImageData(result, 0, 0);
 }
 
 async function processBatchFile(file, options) {
@@ -2606,20 +2646,34 @@ async function processBatchFile(file, options) {
   }
 
   if (options.grayscale) {
-    const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
-    const source = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
-    const result = await imageWorker.run("grayscale", source, {});
-    currentCtx.putImageData(result, 0, 0);
+    await applyBatchWorkerEffect(workCanvas, "grayscale");
   }
 
   if (options.brightness !== 0 || options.contrast !== 0) {
-    const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
-    const source = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
-    const result = await imageWorker.run("brightnessContrast", source, {
+    await applyBatchWorkerEffect(workCanvas, "brightnessContrast", {
       brightness: options.brightness,
       contrast: options.contrast
     });
-    currentCtx.putImageData(result, 0, 0);
+  }
+
+  if (options.histogramCorrection === "normalize") {
+    await applyBatchWorkerEffect(workCanvas, "normalize");
+  } else if (options.histogramCorrection === "equalize") {
+    await applyBatchWorkerEffect(workCanvas, "equalize");
+  }
+
+  if (options.denoise > 0) {
+    await applyBatchWorkerEffect(workCanvas, "denoise", { level: options.denoise });
+  }
+
+  if (options.margin) {
+    addMargin(workCanvas, {
+      top: options.marginTop,
+      right: options.marginRight,
+      bottom: options.marginBottom,
+      left: options.marginLeft,
+      color: options.marginColor
+    });
   }
 
   return await encodeCanvas(workCanvas, options.type, options.quality, {
@@ -2684,35 +2738,69 @@ async function resolveBatchOutputDirectory(mode) {
   throw new Error("出力方法が不明です。");
 }
 
+function convertedRelativePath(item, type, preserveStructure) {
+  const raw = preserveStructure ? (item.relativePath || item.name) : item.name;
+  const parts = raw.split("/").filter(Boolean);
+  const fileName = parts.pop() || item.name;
+  const converted = `${baseNameOf(fileName)}.${outputExtension(type)}`;
+  return preserveStructure ? [...parts, converted].join("/") : converted;
+}
+
+async function writeBatchOutput(outputRoot, item, blob, type, {
+  preserveStructure,
+  conflictPolicy
+}) {
+  const relative = convertedRelativePath(item, type, preserveStructure);
+  const parts = relative.split("/").filter(Boolean);
+  const fileName = parts.pop();
+  const directory = preserveStructure && parts.length
+    ? await getOrCreateDirectoryPath(outputRoot, parts)
+    : outputRoot;
+  const resolvedName = await resolveDirectOutputName(directory, fileName, conflictPolicy);
+  if (resolvedName == null) return false;
+  await createFileInDirectory(directory, resolvedName, blob, {
+    overwrite: conflictPolicy === "overwrite"
+  });
+  return true;
+}
+
 function setupBatchDialog() {
   $("#batchChooseFiles").addEventListener("click", () => $("#batchFileInput").click());
   $("#batchUseWorkspace").addEventListener("click", () => {
     batchItems = batchItemsFromWorkspace();
+    batchSourceMode = "workspace";
     updateBatchSourceLabel();
+    updateBatchOutputAvailability();
   });
 
   $("#batchFileInput").addEventListener("change", event => {
     batchItems = [...(event.target.files || [])]
       .filter(file => file.type.startsWith("image/"))
-      .map(file => ({ name: file.name, file, handle: null }));
+      .map(file => ({
+        name: file.name,
+        relativePath: file.webkitRelativePath || file.name,
+        file,
+        handle: null
+      }));
+    batchSourceMode = "legacy";
+    $("#batchRecursive").checked = false;
     updateBatchSourceLabel();
+    updateBatchOutputAvailability();
     event.target.value = "";
   });
 
   document.querySelectorAll('input[name="batchOutputMode"]').forEach(input => {
     input.addEventListener("change", updateBatchOutputAvailability);
   });
+  $("#batchRecursive").addEventListener("change", () => {
+    updateBatchSourceLabel();
+    updateBatchOutputAvailability();
+  });
 
   $("#batchStart").addEventListener("click", async () => {
-    if (!batchItems.length) {
-      if (folderWorkspace.active) {
-        batchItems = batchItemsFromWorkspace();
-        updateBatchSourceLabel();
-      }
-      if (!batchItems.length) {
-        $("#batchFileInput").click();
-        return;
-      }
+    if (!batchItems.length && !(batchSourceMode === "workspace" && folderWorkspace.active)) {
+      $("#batchFileInput").click();
+      return;
     }
 
     const options = {
@@ -2726,14 +2814,31 @@ function setupBatchDialog() {
       resizeMethod: $("#batchResizeMethod").value,
       grayscale: $("#batchGrayscale").checked,
       brightness: Number($("#batchBrightness").value) || 0,
-      contrast: Number($("#batchContrast").value) || 0
+      contrast: Number($("#batchContrast").value) || 0,
+      histogramCorrection: $("#batchHistogramCorrection").value,
+      denoise: Number($("#batchDenoise").value) || 0,
+      margin: $("#batchMargin").checked,
+      marginTop: Number($("#batchMarginTop").value) || 0,
+      marginRight: Number($("#batchMarginRight").value) || 0,
+      marginBottom: Number($("#batchMarginBottom").value) || 0,
+      marginLeft: Number($("#batchMarginLeft").value) || 0,
+      marginColor: $("#batchMarginColor").value
     };
+    const recursive = $("#batchRecursive").checked && batchSourceMode === "workspace";
+    const preserveStructure = recursive && $("#batchPreserveStructure").checked;
     const outputMode = document.querySelector('input[name="batchOutputMode"]:checked')?.value || "zip";
     const conflictPolicy = $("#batchConflictPolicy").value;
 
     let outputDirectory = null;
     try {
       outputDirectory = await resolveBatchOutputDirectory(outputMode);
+      if (batchSourceMode === "workspace") {
+        batchItems = await collectBatchWorkspaceItems({
+          recursive,
+          excludeHandles: outputDirectory ? [outputDirectory] : []
+        });
+        updateBatchSourceLabel();
+      }
     } catch (error) {
       if (error?.name === "AbortError") {
         $("#batchStatus").textContent = "出力フォルダの選択をキャンセルしました。";
@@ -2741,6 +2846,11 @@ function setupBatchDialog() {
       }
       console.error(error);
       alert(error.message || error);
+      return;
+    }
+
+    if (!batchItems.length) {
+      $("#batchStatus").textContent = "変換対象の画像がありません。";
       return;
     }
 
@@ -2754,29 +2864,27 @@ function setupBatchDialog() {
     try {
       for (let i = 0; i < batchItems.length; i++) {
         const item = batchItems[i];
-        $("#batchStatus").textContent = `${i + 1} / ${batchItems.length}: ${item.name} を変換中…`;
+        $("#batchStatus").textContent = `${i + 1} / ${batchItems.length}: ${item.relativePath || item.name} を変換中…`;
         $("#batchProgress").value = i / batchItems.length * (outputMode === "zip" ? 90 : 100);
 
         const file = await getBatchItemFile(item);
         if (!file) throw new Error(`${item.name} を読み込めませんでした。`);
         const blob = await processBatchFile(file, options);
-        const desiredName = uniqueOutputName(item.name, options.type, outputMode === "zip" ? zipUsedNames : new Set());
 
         if (outputMode === "zip") {
-          zipEntries.push({ name: desiredName, blob });
+          let outputName = convertedRelativePath(item, options.type, preserveStructure);
+          if (!preserveStructure) outputName = uniqueOutputName(item.name, options.type, zipUsedNames);
+          zipEntries.push({ name: outputName, blob });
+          completed++;
         } else {
-          const outputName = await resolveDirectOutputName(outputDirectory, desiredName, conflictPolicy);
-          if (outputName == null) {
-            skipped++;
-          } else {
-            await createFileInDirectory(outputDirectory, outputName, blob, {
-              overwrite: conflictPolicy === "overwrite"
-            });
-            completed++;
-          }
+          const written = await writeBatchOutput(outputDirectory, item, blob, options.type, {
+            preserveStructure,
+            conflictPolicy
+          });
+          if (written) completed++;
+          else skipped++;
         }
 
-        // Release File references obtained from handles between iterations.
         if (item.handle) item.file = null;
         await new Promise(resolve => setTimeout(resolve, 0));
       }
@@ -2788,12 +2896,11 @@ function setupBatchDialog() {
         $("#batchProgress").value = 100;
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
         downloadBlob(zip, `jtrim-batch-${stamp}`, "application/zip");
-        $("#batchStatus").textContent = `${zipEntries.length}ファイルの変換が完了しました。ZIP: ${(zip.size / 1024 / 1024).toFixed(1)}MB`;
+        $("#batchStatus").textContent = `${completed}ファイルの変換が完了しました。ZIP: ${(zip.size / 1024 / 1024).toFixed(1)}MB`;
       } else {
         $("#batchProgress").value = 100;
         $("#batchStatus").textContent = `${completed}ファイルをフォルダへ保存しました${skipped ? `（${skipped}件スキップ）` : ""}。`;
         if (outputMode === "subfolder") {
-          // New output folder should become visible without changing the current location.
           await folderWorkspace.refresh().catch(() => {});
         }
       }
