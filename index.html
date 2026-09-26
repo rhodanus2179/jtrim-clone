@@ -978,6 +978,7 @@
       <div class="dialog-body">
         <div class="inline-fields">
           <button type="button" id="batchChooseFiles">画像を選択</button>
+          <button type="button" id="batchUseWorkspace" hidden>現在のフォルダを対象</button>
           <strong id="batchFileCount">0ファイル</strong>
         </div>
         <fieldset>
@@ -986,6 +987,20 @@
             <label>形式 <select id="batchType"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select></label>
             <label>品質 <input id="batchQuality" type="number" min="1" max="100" value="92">%</label>
             <label class="check-row"><input id="batchPreserveExif" type="checkbox" checked> JPEGのExifを保持</label>
+          </div>
+          <div class="batch-output-options">
+            <label class="check-row"><input type="radio" name="batchOutputMode" value="zip" checked> ZIPで保存</label>
+            <label class="check-row"><input type="radio" name="batchOutputMode" value="subfolder"> 現在フォルダ内のサブフォルダへ直接保存</label>
+            <label class="inline-fields batch-subfolder-row">サブフォルダ名 <input id="batchSubfolderName" type="text" value="converted" maxlength="120"></label>
+            <label class="check-row"><input type="radio" name="batchOutputMode" value="folder"> 出力フォルダを選択して直接保存</label>
+            <label>同名ファイル
+              <select id="batchConflictPolicy">
+                <option value="suffix">連番を付ける</option>
+                <option value="skip">スキップ</option>
+                <option value="overwrite">上書き</option>
+              </select>
+            </label>
+            <p id="batchOutputHint" class="help-text">ZIP方式はすべての対応ブラウザで利用できます。</p>
           </div>
         </fieldset>
         <fieldset>
@@ -1013,9 +1028,9 @@
         </fieldset>
         <progress id="batchProgress" max="100" value="0" style="width:100%"></progress>
         <p id="batchStatus" class="help-text">ファイルを選択してください。</p>
-        <p class="help-text">処理は1ファイルずつ行い、結果をZIPにまとめます。画像データは外部へ送信されません。</p>
+        <p class="help-text">処理は1ファイルずつ行います。直接出力では変換後すぐに保存してメモリを解放します。画像データは外部へ送信されません。</p>
       </div>
-      <div class="dialog-actions"><button value="cancel">閉じる</button><button type="button" class="primary" id="batchStart">変換してZIP保存</button></div>
+      <div class="dialog-actions"><button value="cancel">閉じる</button><button type="button" class="primary" id="batchStart">一括変換を開始</button></div>
     </form>
   </dialog>
 
