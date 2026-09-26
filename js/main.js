@@ -46,6 +46,7 @@ import { parseJpegInfo, jpegSubsamplingCode } from "./io/jpeg-info.js";
 import { extractExifSegment, injectExif, readExifOrientation } from "./io/jpeg-exif.js";
 import { CodecClient, CodecError } from "./codecs/codec-client.js";
 import { composeJpegTransform } from "./codecs/jpeg-orientation.js";
+import { shortcutCommandForEvent, applyShortcutLabels } from "./shortcuts.js";
 import {
   recentHandleStoreAvailable,
   listRecentDirectories,
@@ -4984,47 +4985,18 @@ function setupZoom() {
 }
 
 function setupKeyboard() {
+  applyShortcutLabels();
+
   document.addEventListener("keydown", event => {
     const active = document.activeElement;
     if (active?.matches("input, textarea, select") || active?.closest("dialog[open]")) return;
     if (selection.handleKeyboard(event)) return;
 
-    const ctrl = event.ctrlKey || event.metaKey;
-    const key = event.key.toLowerCase();
-    let command = null;
+    const command = shortcutCommandForEvent(event);
+    if (!command) return;
 
-    if (ctrl && event.shiftKey && key === "a") command = "file.save";
-    else if (ctrl && event.shiftKey && key === "r") command = "file.reload";
-    else if (ctrl && event.shiftKey && key === "p") command = "file.printPreview";
-    else if (ctrl && !event.shiftKey && key === "p") command = "file.print";
-    else if (ctrl && !event.shiftKey && key === "s") command = "file.overwrite";
-    else if (ctrl && event.altKey && key === "t") command = "file.thumbnails";
-    else if (ctrl && key === "b") command = "file.batch";
-    else if (ctrl && key === "w") command = "file.slideshow";
-    else if (ctrl && key === "n") command = "file.new";
-    else if (ctrl && key === "o") command = "file.open";
-    else if (ctrl && key === "z") command = "edit.undo";
-    else if (ctrl && key === "y") command = "edit.redo";
-    else if (ctrl && key === "c") command = "edit.copy";
-    else if (ctrl && key === "v") command = "edit.paste";
-    else if (ctrl && key === "x") command = "edit.cut";
-    else if (!ctrl && event.key === "Delete") command = "edit.erase";
-    else if (ctrl && key === "a") command = "edit.selectAll";
-    else if (ctrl && key === "r") command = "image.resize";
-    else if (ctrl && key === "t") command = "image.crop";
-    else if (ctrl && key === "u") command = "image.coordinateCrop";
-    else if (ctrl && key === "m") command = "image.flipH";
-    else if (ctrl && key === "f") command = "image.flipV";
-    else if (ctrl && key === "j") command = "image.jpegLossless";
-    else if (ctrl && key === "i") command = "image.toggleInterlace";
-    else if (ctrl && key === "g") command = "color.grayscale";
-    else if (ctrl && (event.key === "+" || event.key === "=")) command = "view.zoomIn";
-    else if (ctrl && event.key === "-") command = "view.zoomOut";
-
-    if (command) {
-      event.preventDefault();
-      commands.execute(command);
-    }
+    event.preventDefault();
+    commands.execute(command);
   });
 }
 
