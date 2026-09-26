@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.11.1）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.11.2）まで進んでいます。
 
 ### 実装済み
 
@@ -192,6 +192,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - 元JPEGの4:4:4 / 4:2:2 / 4:2:0 / 4:4:0 / grayscaleを高度エンコード時に維持
   - jpegtran / cjpeg / libspngをWorkerでlazy-load
   - 再現可能なGitHub Actions codec buildとthird-party notices
+- ステータスバーのピクセル色をRGB / HEXで併記
 - 長いメニューのビューポート内スクロール
   - 「カラー」「加工」など項目数の多いメニューでも画面外にはみ出さない
   - 画面高・Visual Viewportに合わせて開くたびに最大高さを再計算
