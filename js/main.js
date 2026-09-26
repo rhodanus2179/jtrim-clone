@@ -103,6 +103,9 @@ let renderedGalleryCount = 0;
 let printPreviewUrl = null;
 let printOutputUrl = null;
 let reopenPrintPreviewAfterSettings = false;
+let fillToolActive = false;
+let fillEyedropperActive = false;
+let fillOperationRunning = false;
 
 const DEFAULT_SAVE_OPTIONS = Object.freeze({
   jpegMode: "quality",
@@ -116,6 +119,13 @@ const DEFAULT_SAVE_OPTIONS = Object.freeze({
 
 const DEFAULT_CODEC_OPTIONS = Object.freeze({
   interlaceProgressive: false
+});
+
+const DEFAULT_FILL_OPTIONS = Object.freeze({
+  leftColor: "#ffffff",
+  rightColor: "#000000",
+  tolerance: 8,
+  opacity: 100
 });
 
 function rgbToHex(r, g, b) {
