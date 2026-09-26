@@ -3927,6 +3927,7 @@ function fillPrintSettingsForm(settings = getPrintSettings()) {
   $("#printMarginRight").value = settings.marginRightMm;
   $("#printMarginBottom").value = settings.marginBottomMm;
   $("#printMarginLeft").value = settings.marginLeftMm;
+  document.querySelector(".print-margin-fields")?.classList.toggle("disabled-fields", settings.borderless);
 }
 
 function readPrintSettingsForm() {
