@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.5.0</span>
+          <span class="version">v0.6.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -74,6 +74,9 @@
             <button data-command="image.shift">シフト(H)…</button>
             <button data-command="image.margin">余白作成(W)…</button>
             <button data-command="image.shadow">影をつける(D)…</button>
+            <button data-command="image.texture">テクスチャ(X)…</button>
+            <hr>
+            <button data-command="image.capture">画面キャプチャ(C)…</button>
             <hr>
             <button data-command="image.denoise">ノイズ除去(Y)…</button>
             <button data-command="image.densityMin">最小濃度抽出</button>
@@ -226,6 +229,7 @@
   <input id="fileInput" type="file" accept="image/*" hidden>
   <input id="joinFileInput" type="file" accept="image/*" hidden>
   <input id="compositeFileInput" type="file" accept="image/*" hidden>
+  <input id="textureFileInput" type="file" accept="image/*" hidden>
 
   <dialog id="newDialog" class="modal">
     <form method="dialog" id="newForm">
@@ -670,6 +674,42 @@
   </dialog>
 
 
+
+  <dialog id="textureDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>テクスチャ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields">
+          <button type="button" id="textureChooseFile">テクスチャ画像を選択</button>
+          <span id="textureFileName" class="help-text">未選択</span>
+        </div>
+        <label class="slider-row"><span>強さ</span><input id="textureOpacityRange" type="range" min="0" max="100" value="100"><input id="textureOpacityNumber" type="number" min="0" max="100" value="100"></label>
+        <label class="slider-row"><span>拡大率</span><input id="textureScaleRange" type="range" min="10" max="300" value="100"><input id="textureScaleNumber" type="number" min="1" max="1000" value="100"></label>
+        <div class="inline-fields"><label>横ずらし <input id="textureOffsetX" type="number" value="0"> px</label><label>縦ずらし <input id="textureOffsetY" type="number" value="0"> px</label></div>
+        <p class="help-text">原版JTrimにならい、テクスチャ画像はモノクロ化してタイル状にマッピングします。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="textureOk" value="default">OK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="captureDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>画面キャプチャ</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <label>遅延
+          <select id="captureDelay">
+            <option value="0">なし</option>
+            <option value="1">1秒</option>
+            <option value="3">3秒</option>
+            <option value="5">5秒</option>
+          </select>
+        </label>
+        <p class="help-text">ブラウザの共有選択画面で「画面」「ウィンドウ」「タブ」などを選択します。Webのセキュリティ制約上、アクティブウィンドウを無断で取得することはできません。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="captureOk" value="default">画面を選択して取り込む</button></div>
+    </form>
+  </dialog>
+
   <dialog id="denoiseDialog" class="modal">
     <form method="dialog">
       <div class="dialog-head"><h2>ノイズ除去</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
@@ -929,7 +969,19 @@
         <label class="stack-field">形式
           <select id="saveType"><option value="image/png">PNG</option><option value="image/jpeg">JPEG</option><option value="image/webp">WebP</option></select>
         </label>
-        <label class="slider-row"><span>品質</span><input id="saveQuality" type="range" min="10" max="100" value="92"><output id="saveQualityOutput">92</output></label>
+        <div id="jpegOptions">
+          <fieldset>
+            <legend>JPEG保存品質</legend>
+            <label class="check-row"><input type="radio" name="jpegMode" value="quality" checked> 品質を指定</label>
+            <label class="slider-row"><span>品質</span><input id="saveQuality" type="range" min="1" max="100" value="92"><output id="saveQualityOutput">92</output></label>
+            <label class="check-row"><input type="radio" name="jpegMode" value="target"> ファイルサイズを指定</label>
+            <label class="inline-fields">最大 <input id="saveTargetKb" type="number" min="1" max="100000" value="500"> KB</label>
+            <p class="help-text">指定サイズ以下に収まる範囲で、できるだけ高いJPEG品質を二分探索します。</p>
+          </fieldset>
+        </div>
+        <div id="genericQualityRow" hidden>
+          <label class="slider-row"><span>品質</span><input id="saveWebpQuality" type="range" min="1" max="100" value="92"><output id="saveWebpQualityOutput">92</output></label>
+        </div>
       </div>
       <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="saveOk" value="default">保存</button></div>
     </form>
@@ -939,7 +991,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.5.0</strong></p>
+        <p><strong>JTrim Web v0.6.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
