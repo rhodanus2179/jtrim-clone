@@ -1,7 +1,10 @@
 import { extractExifSegment, injectExif } from "./jpeg-exif.js";
+import { parseJpegInfo } from "./jpeg-info.js";
 export async function decodeFileToCanvas(file, canvas) {
   const isJpeg = file?.type === "image/jpeg" || /\.jpe?g$/i.test(file?.name || "");
-  const exifSegment = isJpeg ? await extractExifSegment(file) : null;
+  const [exifSegment, jpegInfo] = isJpeg
+    ? await Promise.all([extractExifSegment(file), parseJpegInfo(file)])
+    : [null, null];
   const bitmap = await createImageBitmap(file);
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
@@ -15,7 +18,8 @@ export async function decodeFileToCanvas(file, canvas) {
     width: canvas.width,
     height: canvas.height,
     modified: false,
-    exifSegment
+    exifSegment,
+    jpegInfo
   };
 }
 
@@ -31,7 +35,8 @@ export function createBlankCanvas(canvas, width, height, color = "#ffffff") {
     width,
     height,
     modified: true,
-    exifSegment: null
+    exifSegment: null,
+    jpegInfo: null
   };
 }
 
