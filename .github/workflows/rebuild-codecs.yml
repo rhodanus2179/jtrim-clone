@@ -49,7 +49,7 @@ jobs:
           mkdir -p /tmp/libjpeg-turbo-build
           cd /tmp/libjpeg-turbo-build
           emcmake cmake /tmp/libjpeg-turbo-src             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_EXECUTABLE_SUFFIX=.js             -DENABLE_SHARED=FALSE             -DENABLE_STATIC=TRUE             -DWITH_SIMD=FALSE             -DWITH_TOOLS=TRUE             -DWITH_TESTS=FALSE             -DCMAKE_EXE_LINKER_FLAGS="-O3 -sSINGLE_FILE=1 -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=FS,callMain"
-          cmake --build . --target jpegtran --parallel 2
+          cmake --build . --target jpegtran-static --parallel 2
           find . -maxdepth 2 -type f -name 'jpegtran*.js' -print
           BUILT=$(find . -maxdepth 2 -type f -name 'jpegtran*.js' | head -n1)
           test -n "$BUILT"
