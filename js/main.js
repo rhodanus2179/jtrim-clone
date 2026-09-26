@@ -3870,6 +3870,233 @@ function setupGallery() {
 }
 
 
+
+function getSaveOptions() {
+  const raw = readPreference("save-options", DEFAULT_SAVE_OPTIONS);
+  return {
+    jpegMode: raw.jpegMode === "target" ? "target" : "quality",
+    jpegQuality: Math.max(1, Math.min(100, Number(raw.jpegQuality) || 92)),
+    targetKb: Math.max(1, Math.min(100000, Number(raw.targetKb) || 500)),
+    preserveExif: raw.preserveExif !== false,
+    confirmExif: Boolean(raw.confirmExif),
+    webpQuality: Math.max(1, Math.min(100, Number(raw.webpQuality) || 92))
+  };
+}
+
+function openSaveOptionsDialog() {
+  const options = getSaveOptions();
+  $("#saveOptionsJpegMode").value = options.jpegMode;
+  $("#saveOptionsJpegQuality").value = options.jpegQuality;
+  $("#saveOptionsTargetKb").value = options.targetKb;
+  $("#saveOptionsPreserveExif").checked = options.preserveExif;
+  $("#saveOptionsConfirmExif").checked = options.confirmExif;
+  $("#saveOptionsWebpQuality").value = options.webpQuality;
+  $("#saveOptionsDialog").showModal();
+}
+
+function setupSaveOptionsDialog() {
+  $("#saveOptionsOk").addEventListener("click", event => {
+    event.preventDefault();
+    const options = {
+      jpegMode: $("#saveOptionsJpegMode").value,
+      jpegQuality: Number($("#saveOptionsJpegQuality").value),
+      targetKb: Number($("#saveOptionsTargetKb").value),
+      preserveExif: $("#saveOptionsPreserveExif").checked,
+      confirmExif: $("#saveOptionsConfirmExif").checked,
+      webpQuality: Number($("#saveOptionsWebpQuality").value)
+    };
+    writePreference("save-options", options);
+    $("#saveOptionsDialog").close();
+    setMessage("保存オプションを保存しました");
+  });
+}
+
+function getPrintSettings() {
+  return normalizePrintSettings(readPreference("print-settings", DEFAULT_PRINT_SETTINGS));
+}
+
+function fillPrintSettingsForm(settings = getPrintSettings()) {
+  $("#printPaper").value = settings.paper;
+  $("#printOrientation").value = settings.orientation;
+  const radio = document.querySelector(`input[name="printScaleMode"][value="${settings.scaleMode}"]`);
+  if (radio) radio.checked = true;
+  $("#printScalePercent").value = settings.scalePercent;
+  $("#printBorderless").checked = settings.borderless;
+  $("#printCenter").checked = settings.center;
+  $("#printMarginTop").value = settings.marginTopMm;
+  $("#printMarginRight").value = settings.marginRightMm;
+  $("#printMarginBottom").value = settings.marginBottomMm;
+  $("#printMarginLeft").value = settings.marginLeftMm;
+}
+
+function readPrintSettingsForm() {
+  return normalizePrintSettings({
+    paper: $("#printPaper").value,
+    orientation: $("#printOrientation").value,
+    scaleMode: document.querySelector('input[name="printScaleMode"]:checked')?.value || "fit",
+    scalePercent: Number($("#printScalePercent").value),
+    borderless: $("#printBorderless").checked,
+    center: $("#printCenter").checked,
+    marginTopMm: Number($("#printMarginTop").value),
+    marginRightMm: Number($("#printMarginRight").value),
+    marginBottomMm: Number($("#printMarginBottom").value),
+    marginLeftMm: Number($("#printMarginLeft").value)
+  });
+}
+
+function openPrintSettingsDialog() {
+  fillPrintSettingsForm();
+  $("#printSettingsDialog").showModal();
+}
+
+function setupPrintSettingsDialog() {
+  $("#printBorderless").addEventListener("change", event => {
+    document.querySelector(".print-margin-fields").classList.toggle("disabled-fields", event.target.checked);
+  });
+  $("#printSettingsOk").addEventListener("click", event => {
+    event.preventDefault();
+    const settings = readPrintSettingsForm();
+    writePreference("print-settings", settings);
+    $("#printSettingsDialog").close();
+    setMessage("印刷設定を保存しました");
+    if (reopenPrintPreviewAfterSettings) {
+      reopenPrintPreviewAfterSettings = false;
+      void openPrintPreview();
+    }
+  });
+  $("#printSettingsDialog").addEventListener("close", () => {
+    if ($("#printSettingsDialog").returnValue === "cancel") reopenPrintPreviewAfterSettings = false;
+  });
+}
+
+function applyPreviewImageLayout(settings) {
+  const page = pageSizeMm(settings, canvas.width, canvas.height);
+  const pageNode = $("#printPreviewPage");
+  const img = $("#printPreviewImage");
+  pageNode.style.aspectRatio = `${page.width} / ${page.height}`;
+
+  const top = settings.borderless ? 0 : settings.marginTopMm / page.height * 100;
+  const right = settings.borderless ? 0 : settings.marginRightMm / page.width * 100;
+  const bottom = settings.borderless ? 0 : settings.marginBottomMm / page.height * 100;
+  const left = settings.borderless ? 0 : settings.marginLeftMm / page.width * 100;
+  pageNode.style.padding = `${top}% ${right}% ${bottom}% ${left}%`;
+  pageNode.style.alignItems = settings.center ? "center" : "flex-start";
+  pageNode.style.justifyContent = settings.center ? "center" : "flex-start";
+
+  img.style.width = "";
+  img.style.height = "";
+  img.style.maxWidth = "";
+  img.style.maxHeight = "";
+  img.style.objectFit = "";
+
+  if (settings.scaleMode === "fit") {
+    img.style.maxWidth = "100%";
+    img.style.maxHeight = "100%";
+    img.style.objectFit = "contain";
+  } else if (settings.scaleMode === "percent") {
+    img.style.width = `${settings.scalePercent}%`;
+    img.style.height = "auto";
+  } else {
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.objectFit = "fill";
+  }
+
+  const orientation = resolvedOrientation(settings, canvas.width, canvas.height);
+  $("#printPreviewSummary").textContent =
+    `${settings.paper.toUpperCase()} / ${orientation === "landscape" ? "横" : "縦"} / ` +
+    (settings.scaleMode === "fit" ? "用紙に合わせる" : settings.scaleMode === "stretch" ? "ストレッチ" : `${settings.scalePercent}%`);
+}
+
+async function updatePrintPreview() {
+  if (printPreviewUrl) URL.revokeObjectURL(printPreviewUrl);
+  const blob = await canvasToPngBlob(canvas);
+  printPreviewUrl = URL.createObjectURL(blob);
+  $("#printPreviewImage").src = printPreviewUrl;
+  applyPreviewImageLayout(getPrintSettings());
+}
+
+async function openPrintPreview() {
+  if (!documentReady()) return;
+  if (!$("#printPreviewDialog").open) $("#printPreviewDialog").showModal();
+  await updatePrintPreview();
+}
+
+async function printCurrentDocument() {
+  if (!documentReady()) return;
+  const settings = getPrintSettings();
+  if (printOutputUrl) URL.revokeObjectURL(printOutputUrl);
+  const blob = await canvasToPngBlob(canvas);
+  printOutputUrl = URL.createObjectURL(blob);
+  const img = $("#printHostImage");
+  img.src = printOutputUrl;
+  $("#dynamicPrintStyle").textContent = printCss(settings, canvas.width, canvas.height);
+
+  try { await img.decode(); } catch {}
+  const cleanup = () => {
+    if (printOutputUrl) URL.revokeObjectURL(printOutputUrl);
+    printOutputUrl = null;
+    img.removeAttribute("src");
+    $("#dynamicPrintStyle").textContent = "";
+  };
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.print();
+  setTimeout(() => {
+    if (printOutputUrl) cleanup();
+  }, 60000);
+}
+
+function setupPrintPreviewDialog() {
+  $("#printPreviewClose").addEventListener("click", () => $("#printPreviewDialog").close());
+  $("#printPreviewPrint").addEventListener("click", () => void printCurrentDocument());
+  $("#printPreviewSettings").addEventListener("click", () => {
+    reopenPrintPreviewAfterSettings = true;
+    $("#printPreviewDialog").close();
+    openPrintSettingsDialog();
+  });
+  $("#printPreviewDialog").addEventListener("close", () => {
+    if (printPreviewUrl) URL.revokeObjectURL(printPreviewUrl);
+    printPreviewUrl = null;
+    $("#printPreviewImage").removeAttribute("src");
+  });
+}
+
+function addJpegInfoRow(container, label, value) {
+  const dt = document.createElement("div");
+  dt.className = "jpeg-info-label";
+  dt.textContent = label;
+  const dd = document.createElement("div");
+  dd.className = "jpeg-info-value";
+  dd.textContent = value == null || value === "" ? "—" : String(value);
+  container.append(dt, dd);
+}
+
+function openJpegInfoDialog() {
+  const container = $("#jpegInfoContent");
+  container.replaceChildren();
+  const info = state.document?.jpegInfo;
+
+  if (!info) {
+    addJpegInfoRow(container, "JPEG情報", "現在の画像には元JPEGの情報がありません");
+  } else {
+    addJpegInfoRow(container, "画像サイズ", `${info.width} × ${info.height} px`);
+    addJpegInfoRow(container, "ファイルサイズ", `${(info.size / 1024).toFixed(1)} KB`);
+    addJpegInfoRow(container, "符号化", info.progressive ? "Progressive JPEG" : "Baseline / Sequential JPEG");
+    addJpegInfoRow(container, "推定品質", info.estimatedQuality ? `約 ${info.estimatedQuality}` : "推定不可");
+    addJpegInfoRow(container, "色成分", info.componentCount);
+    addJpegInfoRow(container, "サンプリング", info.sampling);
+    addJpegInfoRow(container, "精度", info.precision ? `${info.precision} bit` : null);
+    addJpegInfoRow(container, "Exif", info.hasExif ? "あり" : "なし");
+    addJpegInfoRow(container, "ICCプロファイル", info.hasIcc ? "あり" : "なし");
+    addJpegInfoRow(container, "リスタート間隔", info.restartInterval || "なし");
+    addJpegInfoRow(container, "量子化表", Object.keys(info.quantizationTables || {}).length
+      ? Object.keys(info.quantizationTables).map(id => `DQT ${id}`).join(", ")
+      : "なし");
+  }
+
+  $("#jpegInfoDialog").showModal();
+}
+
 function writableImageType(type, fileName = "") {
   if (["image/jpeg", "image/png", "image/webp"].includes(type)) return type;
   const lower = String(fileName || "").toLowerCase();
