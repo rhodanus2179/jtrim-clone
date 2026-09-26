@@ -48,6 +48,18 @@ function samplingName(components) {
   return `Y ${yH}x${yV} / Cb ${cb.h}x${cb.v} / Cr ${cr.h}x${cr.v}`;
 }
 
+export function jpegSubsamplingCode(info) {
+  if (!info) return null;
+  if (info.componentCount === 1) return "gray";
+  switch (info.sampling) {
+    case "4:4:4": return "444";
+    case "4:2:2": return "422";
+    case "4:2:0": return "420";
+    case "4:4:0": return "440";
+    default: return null;
+  }
+}
+
 export async function parseJpegInfo(blob) {
   if (!blob?.arrayBuffer) return null;
   const bytes = new Uint8Array(await blob.arrayBuffer());
