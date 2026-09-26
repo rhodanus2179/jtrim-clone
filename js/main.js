@@ -43,6 +43,9 @@ import {
   printCss
 } from "./io/print.js";
 import { parseJpegInfo } from "./io/jpeg-info.js";
+import { extractExifSegment, injectExif, readExifOrientation } from "./io/jpeg-exif.js";
+import { CodecClient, CodecError } from "./codecs/codec-client.js";
+import { composeJpegTransform } from "./codecs/jpeg-orientation.js";
 import {
   recentHandleStoreAvailable,
   listRecentDirectories,
@@ -55,6 +58,7 @@ const state = new AppState();
 const history = new HistoryManager(16);
 const commands = new CommandRegistry();
 const imageWorker = new ImageWorkerClient();
+const codecClient = new CodecClient();
 const folderWorkspace = new WorkspaceController();
 const fsCapabilities = getFileSystemCapabilities();
 
@@ -106,6 +110,10 @@ const DEFAULT_SAVE_OPTIONS = Object.freeze({
   preserveExif: true,
   confirmExif: false,
   webpQuality: 92
+});
+
+const DEFAULT_CODEC_OPTIONS = Object.freeze({
+  interlaceProgressive: false
 });
 
 const selection = new SelectionController({
@@ -640,6 +648,14 @@ function setupCommands() {
     .register("image.jpegInfo", {
       enabled: documentReady,
       run: openJpegInfoDialog
+    })
+    .register("image.jpegLossless", {
+      enabled: () => documentReady() && hasCurrentJpegSource(),
+      run: openJpegLosslessDialog
+    })
+    .register("image.toggleInterlace", {
+      enabled: documentReady,
+      run: toggleInterlaceProgressive
     })
     .register("image.transparentColor", {
       enabled: documentReady,
