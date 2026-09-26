@@ -2,10 +2,13 @@ import { AppState } from "./state.js";
 import { HistoryManager } from "./history.js";
 import { CommandRegistry } from "./commands.js";
 import { SelectionController } from "./selection.js";
-import { createBlankCanvas, decodeFileToCanvas, saveCanvas } from "./io/files.js";
+import {
+  createBlankCanvas, decodeFileToCanvas, saveCanvas,
+  encodeJpegToTargetSize, downloadBlob
+} from "./io/files.js";
 import {
   cropCanvas, coordinateCrop, circularCrop, roundedCrop,
-  rotate90, rotateArbitrary, flipCanvas, shiftCanvas, addMargin, addShadow,
+  rotate90, rotateArbitrary, flipCanvas, shiftCanvas, addMargin, addShadow, applyTexture,
   copyRegion, clearRegion, pasteCanvas, compositeCanvas, joinCanvas,
   grayscale, sepia, invert, drawText
 } from "./engine/operations.js";
@@ -37,6 +40,7 @@ let joinSourceCanvas = null;
 let compositeSourceCanvas = null;
 let histogramResult = null;
 let showTransparency = false;
+let textureSourceCanvas = null;
 
 const selection = new SelectionController({
   canvas,
@@ -60,6 +64,41 @@ async function fileToCanvas(file) {
   out.getContext("2d").drawImage(bitmap, 0, 0);
   bitmap.close?.();
   return out;
+}
+
+
+function canvasToPngBlob(sourceCanvas) {
+  return new Promise((resolve, reject) => {
+    sourceCanvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("PNGを作成できませんでした")), "image/png");
+  });
+}
+
+async function writeSystemClipboard(sourceCanvas) {
+  if (!sourceCanvas || !navigator.clipboard?.write || typeof ClipboardItem === "undefined") return false;
+  try {
+    const blob = await canvasToPngBlob(sourceCanvas);
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  } catch (error) {
+    console.debug("System clipboard write unavailable:", error);
+    return false;
+  }
+}
+
+async function readSystemClipboardImage() {
+  if (!navigator.clipboard?.read) return null;
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find(value => value.startsWith("image/"));
+      if (!type) continue;
+      const blob = await item.getType(type);
+      return await fileToCanvas(blob);
+    }
+  } catch (error) {
+    console.debug("System clipboard read unavailable:", error);
+  }
+  return null;
 }
 
 function documentReady() {
@@ -275,9 +314,13 @@ function setupCommands() {
     })
     .register("edit.copy", {
       enabled: documentReady,
-      run: () => {
+      run: async () => {
         internalClipboard = copyRegion(canvas, state.selection);
-        setMessage(state.selection ? "選択範囲をコピーしました" : "画像全体をコピーしました");
+        const system = await writeSystemClipboard(internalClipboard);
+        setMessage(
+          (state.selection ? "選択範囲" : "画像全体") +
+          (system ? "をシステムクリップボードへコピーしました" : "を内部クリップボードへコピーしました")
+        );
         refreshUI();
       }
     })
@@ -285,15 +328,23 @@ function setupCommands() {
       enabled: documentReady,
       run: async () => {
         internalClipboard = copyRegion(canvas, state.selection);
+        await writeSystemClipboard(internalClipboard);
         await mutate("切り取り", () => clearRegion(canvas, state.selection, "#ffffff"));
       }
     })
     .register("edit.paste", {
-      enabled: () => documentReady() && Boolean(internalClipboard),
+      enabled: documentReady,
       run: async () => {
+        const systemClipboard = await readSystemClipboardImage();
+        const source = systemClipboard || internalClipboard;
+        if (!source) {
+          setMessage("貼り付け可能な画像がクリップボードにありません");
+          return;
+        }
+        internalClipboard = source;
         const x = Math.round(state.selection?.x ?? 0);
         const y = Math.round(state.selection?.y ?? 0);
-        await mutate("貼り付け", () => pasteCanvas(canvas, internalClipboard, x, y, 1));
+        await mutate("貼り付け", () => pasteCanvas(canvas, source, x, y, 1));
       }
     })
     .register("edit.erase", {
@@ -375,6 +426,14 @@ function setupCommands() {
     .register("image.shadow", {
       enabled: documentReady,
       run: () => $("#shadowDialog").showModal()
+    })
+    .register("image.texture", {
+      enabled: documentReady,
+      run: openTextureDialog
+    })
+    .register("image.capture", {
+      enabled: () => !state.busy && Boolean(navigator.mediaDevices?.getDisplayMedia),
+      run: () => $("#captureDialog").showModal()
     })
     .register("image.denoise", {
       enabled: documentReady,
@@ -1590,6 +1649,117 @@ function setupTransparentColorDialog() {
 }
 
 
+
+function openTextureDialog() {
+  textureSourceCanvas = null;
+  $("#textureFileName").textContent = "未選択";
+  $("#textureOpacityRange").value = $("#textureOpacityNumber").value = 100;
+  $("#textureScaleRange").value = $("#textureScaleNumber").value = 100;
+  $("#textureOffsetX").value = $("#textureOffsetY").value = 0;
+  $("#textureDialog").showModal();
+}
+
+function setupTextureDialog() {
+  bindRangeAndNumber("#textureOpacityRange", "#textureOpacityNumber", () => {});
+  bindRangeAndNumber("#textureScaleRange", "#textureScaleNumber", () => {});
+  $("#textureChooseFile").addEventListener("click", () => $("#textureFileInput").click());
+  $("#textureFileInput").addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      textureSourceCanvas = await fileToCanvas(file);
+      $("#textureFileName").textContent = `${file.name} (${textureSourceCanvas.width}×${textureSourceCanvas.height})`;
+    } catch (error) {
+      console.error(error);
+      alert("テクスチャ画像を読み込めませんでした。");
+    } finally {
+      event.target.value = "";
+    }
+  });
+  $("#textureOk").addEventListener("click", async event => {
+    event.preventDefault();
+    if (!textureSourceCanvas) {
+      alert("テクスチャ画像を選択してください。");
+      return;
+    }
+    const options = {
+      opacity: Number($("#textureOpacityNumber").value),
+      scale: Number($("#textureScaleNumber").value),
+      offsetX: Number($("#textureOffsetX").value),
+      offsetY: Number($("#textureOffsetY").value)
+    };
+    $("#textureDialog").close();
+    await mutate("テクスチャ", () => applyTexture(canvas, textureSourceCanvas, state.selection, options));
+  });
+}
+
+async function captureDisplay(delaySeconds = 0) {
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false
+    });
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play();
+
+    if (delaySeconds > 0) {
+      setMessage(`${delaySeconds}秒後にキャプチャします…`);
+      await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+    }
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) throw new Error("共有画面のサイズを取得できませんでした");
+
+    canvas.width = width;
+    canvas.height = height;
+    imageCtx.drawImage(video, 0, 0, width, height);
+    history.clear();
+    state.setDocument({
+      fileName: "画面キャプチャ.png",
+      sourceFormat: "image/png",
+      width,
+      height,
+      modified: true
+    });
+    showDocument();
+    applyZoom(1);
+    if (width > workspace.clientWidth || height > workspace.clientHeight) zoomFit();
+    syncLayers();
+    setMessage("画面をキャプチャしました");
+  } finally {
+    stream?.getTracks().forEach(track => track.stop());
+  }
+}
+
+function setupCaptureDialog() {
+  $("#captureOk").addEventListener("click", async event => {
+    event.preventDefault();
+    if (state.document?.modified && !confirm("現在の画像を画面キャプチャで置き換えます。保存していない変更は失われます。続けますか？")) {
+      return;
+    }
+    const delay = Number($("#captureDelay").value) || 0;
+    $("#captureDialog").close();
+    try {
+      state.setBusy(true);
+      setMessage("共有する画面を選択してください…");
+      await captureDisplay(delay);
+    } catch (error) {
+      console.error(error);
+      if (error?.name !== "NotAllowedError") alert(`画面キャプチャに失敗しました。\n${error.message || error}`);
+      setMessage(error?.name === "NotAllowedError" ? "画面キャプチャをキャンセルしました" : "画面キャプチャに失敗しました");
+    } finally {
+      state.setBusy(false);
+      refreshUI();
+    }
+  });
+}
+
 function openDenoiseDialog() {
   $("#denoiseRange").value = $("#denoiseNumber").value = 1;
   beginPreview(180_000);
@@ -2253,16 +2423,57 @@ function setupCustomFilterDialog() {
 }
 
 function setupSaveDialog() {
+  const typeSelect = $("#saveType");
+  const updateSaveOptions = () => {
+    const type = typeSelect.value;
+    $("#jpegOptions").hidden = type !== "image/jpeg";
+    $("#genericQualityRow").hidden = type !== "image/webp";
+  };
+
   $("#saveQuality").addEventListener("input", event => {
     $("#saveQualityOutput").value = event.target.value;
   });
-  $("#saveOk").addEventListener("click", event => {
+  $("#saveWebpQuality").addEventListener("input", event => {
+    $("#saveWebpQualityOutput").value = event.target.value;
+  });
+  typeSelect.addEventListener("change", updateSaveOptions);
+  updateSaveOptions();
+
+  $("#saveOk").addEventListener("click", async event => {
     event.preventDefault();
-    const type = $("#saveType").value;
-    const quality = Number($("#saveQuality").value) / 100;
-    saveCanvas(canvas, type, quality, state.document?.fileName || "image");
+    const type = typeSelect.value;
+    const baseName = state.document?.fileName || "image";
     $("#saveDialog").close();
-    setMessage("保存ファイルを作成しました");
+
+    try {
+      state.setBusy(true);
+      if (type === "image/jpeg" && document.querySelector('input[name="jpegMode"]:checked')?.value === "target") {
+        const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
+        setMessage(`JPEGを${targetKb}KB以下に最適化しています…`);
+        const result = await encodeJpegToTargetSize(canvas, targetKb * 1024);
+        downloadBlob(result.blob, baseName, "image/jpeg");
+        const actualKb = (result.blob.size / 1024).toFixed(1);
+        const q = Math.round(result.quality * 100);
+        setMessage(
+          result.targetMet
+            ? `JPEGを保存しました: ${actualKb}KB / 品質約${q}`
+            : `品質1でも目標サイズを超えました: ${actualKb}KB`
+        );
+      } else {
+        const quality = type === "image/webp"
+          ? Number($("#saveWebpQuality").value) / 100
+          : Number($("#saveQuality").value) / 100;
+        const blob = await saveCanvas(canvas, type, quality, baseName);
+        setMessage(`保存ファイルを作成しました (${(blob.size / 1024).toFixed(1)}KB)`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert(`保存に失敗しました。\n${error.message || error}`);
+      setMessage("保存に失敗しました");
+    } finally {
+      state.setBusy(false);
+      refreshUI();
+    }
   });
 }
 
@@ -2352,6 +2563,8 @@ setupShapeCropDialog();
 setupCoordinateCropDialog();
 setupShiftDialog();
 setupShadowDialog();
+setupTextureDialog();
+setupCaptureDialog();
 setupDenoiseDialog();
 setupTransparentColorDialog();
 setupRedEyeDialog();
