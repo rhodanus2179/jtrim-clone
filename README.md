@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.6.0）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.7.0）まで進んでいます。
 
 ### 実装済み
 
@@ -106,6 +106,27 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - 0 / 1 / 3 / 5秒の遅延
 - JPEG目標ファイルサイズ保存
   - 指定KB以下になる範囲で品質を二分探索
+- JPEG Exif保持
+  - APP1/Exifを抽出・再挿入
+  - Orientationを1へ正規化
+  - 画像サイズタグを更新可能な範囲で更新
+  - 目標ファイルサイズ保存でもExif込みのサイズで探索
+- 一括変換
+  - 複数画像を1ファイルずつ逐次処理
+  - PNG / JPEG / WebP
+  - Exif保持
+  - リサイズ（7方式）
+  - グレースケール
+  - 明るさ / コントラスト
+  - 結果をZIPで保存
+- サムネイル表示
+  - 複数ファイル選択
+  - lazy loading
+  - クリックで編集画面に読込
+- スライドショー
+  - 前 / 次 / 自動再生
+  - 2 / 3 / 5 / 10秒
+  - 左右キー / Space操作
 - Undo / Redo（16段階を基本）
 - JTrim準拠の主要ショートカット
 - GitHub Actions による JavaScript 構文チェック
@@ -128,6 +149,7 @@ python -m http.server 8000
 - [実機スクリーンショットに基づくUIリファレンス](docs/ui-screenshot-reference.md)
 - [アーキテクチャ設計](docs/architecture.md)
 - [実装計画](docs/implementation-plan.md)
+- [周辺機能ミニ設計](docs/peripheral-features-design.md)
 
 ## Fidelity goals
 
