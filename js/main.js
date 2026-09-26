@@ -891,19 +891,61 @@ function setupCommands() {
 function setupMenus() {
   const menus = [...document.querySelectorAll(".menu")];
 
+  const closeMenus = () => {
+    menus.forEach(menu => {
+      menu.classList.remove("open");
+      const popup = menu.querySelector(".menu-popup");
+      popup?.classList.remove("is-scrollable");
+      popup?.style.removeProperty("max-height");
+    });
+  };
+
+  const fitMenuPopup = (menu, { resetScroll = false } = {}) => {
+    if (!menu?.classList.contains("open")) return;
+    const popup = menu.querySelector(".menu-popup");
+    if (!popup) return;
+
+    const rect = popup.getBoundingClientRect();
+    const visualViewport = window.visualViewport;
+    const viewportBottom = visualViewport
+      ? visualViewport.offsetTop + visualViewport.height
+      : window.innerHeight;
+    const available = Math.max(96, Math.floor(viewportBottom - rect.top - 8));
+
+    popup.style.maxHeight = `${available}px`;
+    popup.classList.toggle("is-scrollable", popup.scrollHeight > available + 1);
+
+    if (resetScroll) popup.scrollTop = 0;
+    else if (popup.scrollTop + popup.clientHeight > popup.scrollHeight) {
+      popup.scrollTop = Math.max(0, popup.scrollHeight - popup.clientHeight);
+    }
+  };
+
+  const refitOpenMenu = () => {
+    const openMenu = menus.find(menu => menu.classList.contains("open"));
+    if (openMenu) fitMenuPopup(openMenu);
+  };
+
   document.querySelectorAll(".menu-trigger").forEach(trigger => {
     trigger.addEventListener("click", event => {
       event.stopPropagation();
       const menu = trigger.closest(".menu");
-      const open = menu.classList.contains("open");
-      menus.forEach(m => m.classList.remove("open"));
-      if (!open) menu.classList.add("open");
+      const wasOpen = menu.classList.contains("open");
+      closeMenus();
+      if (!wasOpen) {
+        menu.classList.add("open");
+        fitMenuPopup(menu, { resetScroll: true });
+      }
     });
   });
 
+  window.addEventListener("resize", refitOpenMenu);
+  window.visualViewport?.addEventListener("resize", refitOpenMenu);
+  window.visualViewport?.addEventListener("scroll", refitOpenMenu);
+
   document.addEventListener("click", event => {
-    if (!event.target.closest(".menu-popup")) menus.forEach(m => m.classList.remove("open"));
-    if (event.target.closest("[data-command]")) menus.forEach(m => m.classList.remove("open"));
+    if (!event.target.closest(".menu-popup")) closeMenus();
+    if (event.target.closest("[data-command]")) closeMenus();
   });
 }
 
