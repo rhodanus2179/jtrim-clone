@@ -301,6 +301,7 @@ async function loadFile(file, sourceContext = null) {
     setMessage("画像を読み込んでいます…");
     hidePreview();
     const meta = await decodeFileToCanvas(file, canvas);
+    meta.sourceFile = file;
     if (sourceContext?.fileHandle) {
       meta.fileHandle = sourceContext.fileHandle;
       meta.parentDirectoryHandle = sourceContext.parentDirectoryHandle || null;
@@ -326,6 +327,58 @@ async function loadFile(file, sourceContext = null) {
     state.setBusy(false);
     refreshUI();
   }
+}
+
+
+async function reloadCurrentDocument() {
+  const doc = state.document;
+  if (!doc) return;
+
+  if (doc.modified && !confirm("保存していない変更を破棄して、画像を読み込み直しますか？")) {
+    setMessage("読み込み直しをキャンセルしました");
+    return;
+  }
+
+  try {
+    if (doc.fileHandle) {
+      const file = await getFileFromHandle(doc.fileHandle);
+      await loadFile(file, {
+        fileHandle: doc.fileHandle,
+        parentDirectoryHandle: doc.parentDirectoryHandle,
+        workspaceRelativePath: doc.workspaceRelativePath || file.name
+      });
+      setMessage(`${file.name} を読み込み直しました`);
+      return;
+    }
+
+    if (doc.sourceFile) {
+      await loadFile(doc.sourceFile);
+      setMessage(`${doc.sourceFile.name || doc.fileName} を読み込み直しました`);
+      return;
+    }
+
+    setMessage("読み込み直せる元ファイルがありません");
+  } catch (error) {
+    console.error(error);
+    alert(`読み込み直しに失敗しました。\n${error.message || error}`);
+  }
+}
+
+async function clearApplicationClipboard() {
+  internalClipboard = null;
+  let systemCleared = false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText("");
+      systemCleared = true;
+    } catch (error) {
+      console.debug("System clipboard clear unavailable:", error);
+    }
+  }
+  setMessage(systemCleared
+    ? "内部／システムクリップボードをクリアしました"
+    : "内部クリップボードをクリアしました");
+  refreshUI();
 }
 
 async function mutate(label, operation, { clearSelection = false } = {}) {
