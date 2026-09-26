@@ -493,7 +493,7 @@ Command:
 
 ```text
 image.toggleInterlace
-shortcut: Ctrl+I
+shortcut: Ctrl+Alt+I
 ```
 
 これはドキュメント画素を変更しない **保存設定**。
@@ -576,7 +576,7 @@ Progressive ON/OFF によってサイズが変わるため、各候補は実際�
 
 を追加可能。
 
-ただし初期実装では原版同様、保存設定としての Ctrl+I を優先する。
+ただし初期実装では原版同様、保存設定としての Ctrl+Alt+I を優先する。
 
 ## 17. PNG Interlaced
 
@@ -806,7 +806,7 @@ Advanced encode時は大画像でメモリ不足になり得るため、Worker�
 初回のみ:
 
 ```text
-Ctrl+I保存
+Ctrl+Alt+I保存
 JPEG lossless transform
 Adam7 PNG保存
         |
@@ -995,7 +995,7 @@ JPEGを再量子化せず回転 / 反転できる。
 - target-size search integration
 - Exif injection
 - batch integration
-- Ctrl+I
+- Ctrl+Alt+I
 
 完了条件:
 保存JPEGのSOF markerでProgressive ON/OFFを確認できる。
@@ -1006,7 +1006,7 @@ JPEGを再量子化せず回転 / 反転できる。
 - RGBA8 encode
 - Adam7
 - Save / Batch integration
-- Ctrl+I
+- Ctrl+Alt+I
 
 完了条件:
 IHDR interlace method 1のPNGを生成し、decode後RGBAが一致する。
