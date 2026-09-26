@@ -134,6 +134,10 @@ kbd { margin-left: auto; color: var(--muted); font-family: inherit; font-size: 1
 .status-bar > span { padding: 0 9px; border-right: 1px solid #e3e6e9; overflow: hidden; text-overflow: ellipsis; }
 .status-spacer { flex: 1; border: 0 !important; }
 #statusMessage { max-width: 290px; }
+#statusColor {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
 
 button, select, input[type="number"], textarea { border: 1px solid var(--border-strong); border-radius: 6px; background: #fff; }
 button { padding: 7px 13px; cursor: pointer; }
