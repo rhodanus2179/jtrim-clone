@@ -2830,7 +2830,8 @@ async function processBatchFile(file, options) {
     const encoded = await codecClient.jpegEncode(imageData, {
       quality: Math.round(options.quality * 100),
       progressive: true,
-      optimize: true
+      optimize: true,
+      subsampling: options.grayscale ? "gray" : jpegSubsamplingCode(meta.jpegInfo)
     });
     return exifSegment
       ? await injectExif(encoded.blob, exifSegment, workCanvas.width, workCanvas.height)
@@ -4418,21 +4419,40 @@ function currentSaveQuality(type) {
   return .92;
 }
 
-async function encodeProgressiveJpeg(imageData, quality, exifSegment = null) {
+async function reusablePristineJpegSource({ preserveExif = true } = {}) {
+  const doc = state.document;
+  if (!doc?.jpegSourceState?.pristine || !hasCurrentJpegSource()) return null;
+
+  const sourceFile = await currentJpegSourceFile();
+  if (!sourceFile) return null;
+
+  if (doc.fileHandle && doc.sourceSnapshot) {
+    const latestSnapshot = await createFileSnapshot(sourceFile);
+    if (fileSnapshotChanged(doc.sourceSnapshot, latestSnapshot)) return null;
+  }
+
+  const info = await parseJpegInfo(sourceFile);
+  if (!info) return null;
+  if (!preserveExif && info.hasExif) return null;
+  return { sourceFile, info };
+}
+
+async function encodeProgressiveJpeg(imageData, quality, exifSegment = null, subsampling = null) {
   const encoded = await codecClient.jpegEncode(imageData, {
     quality: Math.max(1, Math.min(100, Math.round(quality * 100))),
     progressive: true,
-    optimize: true
+    optimize: true,
+    subsampling
   });
   return exifSegment
     ? await injectExif(encoded.blob, exifSegment, imageData.width, imageData.height)
     : encoded.blob;
 }
 
-async function encodeProgressiveJpegToTargetSize(targetBytes, exifSegment = null) {
+async function encodeProgressiveJpegToTargetSize(targetBytes, exifSegment = null, subsampling = null) {
   targetBytes = Math.max(1, Math.round(Number(targetBytes) || 1));
   const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
-  const encodeCandidate = quality => encodeProgressiveJpeg(imageData, quality, exifSegment);
+  const encodeCandidate = quality => encodeProgressiveJpeg(imageData, quality, exifSegment, subsampling);
 
   const minimum = await encodeCandidate(.01);
   if (minimum.size > targetBytes) {
@@ -4466,7 +4486,8 @@ async function encodeProgressiveJpegToTargetSize(targetBytes, exifSegment = null
 
 async function encodeCurrentForSave(type, {
   preserveExif = true,
-  respectTargetMode = false
+  respectTargetMode = false,
+  preserveJpegData = true
 } = {}) {
   const exifSegment = type === "image/jpeg" && preserveExif
     ? state.document?.exifSegment
@@ -4474,15 +4495,41 @@ async function encodeCurrentForSave(type, {
   const advancedScan = getCodecOptions().interlaceProgressive;
   const progressive = type === "image/jpeg" && advancedScan;
   const interlacedPng = type === "image/png" && advancedScan;
-
-  if (
-    type === "image/jpeg" &&
+  const targetMode = type === "image/jpeg" &&
     respectTargetMode &&
-    document.querySelector('input[name="jpegMode"]:checked')?.value === "target"
-  ) {
+    document.querySelector('input[name="jpegMode"]:checked')?.value === "target";
+
+  if (type === "image/jpeg" && preserveJpegData && !targetMode) {
+    const reusable = await reusablePristineJpegSource({ preserveExif });
+    if (reusable) {
+      if (Boolean(reusable.info.progressive) === progressive) {
+        return {
+          blob: reusable.sourceFile,
+          detail: `${progressive ? "Progressive" : "Sequential"} / 元JPEGを再圧縮せず保存`
+        };
+      }
+
+      const transcoded = await codecClient.jpegTranscode(reusable.sourceFile, {
+        progressive,
+        copyMarkers: true
+      });
+      const info = await parseJpegInfo(transcoded.blob);
+      if (!info || Boolean(info.progressive) !== progressive) {
+        throw new Error("JPEGのロスレス符号化形式変換を確認できませんでした。");
+      }
+      return {
+        blob: transcoded.blob,
+        detail: `${progressive ? "Progressive" : "Sequential"}へロスレス変換（DCT再量子化なし）`
+      };
+    }
+  }
+
+  const subsampling = jpegSubsamplingCode(state.document?.jpegInfo);
+
+  if (targetMode) {
     const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
     const result = progressive
-      ? await encodeProgressiveJpegToTargetSize(targetKb * 1024, exifSegment)
+      ? await encodeProgressiveJpegToTargetSize(targetKb * 1024, exifSegment, subsampling)
       : await encodeJpegToTargetSize(canvas, targetKb * 1024, { exifSegment });
     return {
       blob: result.blob,
@@ -4496,8 +4543,16 @@ async function encodeCurrentForSave(type, {
 
   if (progressive) {
     const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
-    const blob = await encodeProgressiveJpeg(imageData, currentSaveQuality(type), exifSegment);
-    return { blob, detail: `Progressive / ${(blob.size / 1024).toFixed(1)}KB` };
+    const blob = await encodeProgressiveJpeg(
+      imageData,
+      currentSaveQuality(type),
+      exifSegment,
+      subsampling
+    );
+    return {
+      blob,
+      detail: `Progressive / ${subsampling ? `${subsampling} / ` : ""}${(blob.size / 1024).toFixed(1)}KB`
+    };
   }
 
   if (interlacedPng) {
@@ -4522,6 +4577,8 @@ async function updateDocumentFileHandleAfterSave(handle, type) {
   state.document.sourceFormat = type;
   state.document.sourceSnapshot = await createFileSnapshot(latest);
   state.document.jpegInfo = type === "image/jpeg" ? await parseJpegInfo(latest) : null;
+  state.document.exifSegment = type === "image/jpeg" ? await extractExifSegment(latest) : null;
+  state.document.jpegSourceState = type === "image/jpeg" ? { pristine: true } : null;
   state.markModified(false);
 }
 
@@ -4571,7 +4628,8 @@ async function overwriteCurrentDocument() {
     }
     const encoded = await encodeCurrentForSave(type, {
       preserveExif,
-      respectTargetMode: false
+      respectTargetMode: false,
+      preserveJpegData: saveOptions.preserveJpegData
     });
     await writeBlobToFileHandle(doc.fileHandle, encoded.blob);
     await updateDocumentFileHandleAfterSave(doc.fileHandle, type);
@@ -4602,6 +4660,12 @@ function openSaveDialog() {
   if (mode) mode.checked = true;
   $("#savePreserveExif").disabled = !hasExif;
   $("#savePreserveExif").checked = hasExif && options.preserveExif;
+  const pristineJpeg = Boolean(state.document?.jpegSourceState?.pristine && hasCurrentJpegSource());
+  $("#savePreserveJpegData").disabled = !pristineJpeg;
+  $("#savePreserveJpegData").checked = pristineJpeg && options.preserveJpegData;
+  $("#savePreserveJpegDataStatus").textContent = pristineJpeg
+    ? "ONなら品質値を変更せず、元JPEGのDCTデータをそのまま保存／Progressive切替します。"
+    : "通常編集後のJPEGは再エンコードが必要です。";
   $("#saveExifStatus").textContent = hasExif
     ? "元JPEGのExifを保持できます（Orientationは1に正規化し、画像サイズタグを更新します）。"
     : "保持できるExif情報はありません。";
@@ -4638,6 +4702,7 @@ function setupSaveDialog() {
     const type = typeSelect.value;
     const baseName = state.document?.fileName || "image";
     const preserveExif = type === "image/jpeg" && $("#savePreserveExif").checked;
+    const preserveJpegData = type === "image/jpeg" && $("#savePreserveJpegData").checked;
     const savedOptions = getSaveOptions();
 
     if (preserveExif && savedOptions.confirmExif && !confirm("元JPEGのExif情報を保持して保存しますか？")) {
@@ -4671,7 +4736,8 @@ function setupSaveDialog() {
       setMessage("保存ファイルを作成しています…");
       const encoded = await encodeCurrentForSave(type, {
         preserveExif,
-        respectTargetMode: true
+        respectTargetMode: true,
+        preserveJpegData
       });
 
       if (targetHandle) {
@@ -4685,8 +4751,21 @@ function setupSaveDialog() {
       } else {
         downloadBlob(encoded.blob, baseName, type);
         if (state.document) {
+          const savedName = nameWithTypeExtension(baseName, type);
+          const memoryFile = new File([encoded.blob], savedName, {
+            type,
+            lastModified: Date.now()
+          });
+          state.document.fileName = savedName;
+          state.document.sourceFile = memoryFile;
           state.document.sourceFormat = type;
-          state.document.jpegInfo = type === "image/jpeg" ? await parseJpegInfo(encoded.blob) : null;
+          state.document.fileHandle = null;
+          state.document.parentDirectoryHandle = null;
+          state.document.workspaceRelativePath = null;
+          state.document.sourceSnapshot = null;
+          state.document.jpegInfo = type === "image/jpeg" ? await parseJpegInfo(memoryFile) : null;
+          state.document.exifSegment = type === "image/jpeg" ? await extractExifSegment(memoryFile) : null;
+          state.document.jpegSourceState = type === "image/jpeg" ? { pristine: true } : null;
         }
         state.markModified(false);
         setMessage(`保存ファイルを作成しました (${encoded.detail})`);
