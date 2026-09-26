@@ -18,7 +18,7 @@ jobs:
       - name: Check worker module imports
         run: node --input-type=module -e "globalThis.self={}; await import('./js/worker/image-worker.js')"
       - name: Check IO module imports
-        run: node --input-type=module -e "await import('./js/io/files.js'); await import('./js/io/jpeg-exif.js'); await import('./js/io/zip.js'); await import('./js/io/file-system-access.js'); await import('./js/workspace/workspace-controller.js')"
+        run: node --input-type=module -e "await import('./js/io/files.js'); await import('./js/io/jpeg-exif.js'); await import('./js/io/zip.js'); await import('./js/io/file-system-access.js'); await import('./js/io/handle-store.js'); await import('./js/workspace/workspace-controller.js')"
       - name: Run IO smoke tests
         run: node tests/io-smoke.mjs
       - name: Run File System Access smoke tests
