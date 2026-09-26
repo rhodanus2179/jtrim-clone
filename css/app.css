@@ -349,3 +349,21 @@ progress {
   color: var(--muted);
   font-size: 10px;
 }
+
+
+.batch-output-options {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+.batch-subfolder-row {
+  margin-left: 25px;
+}
+.batch-subfolder-row input[type="text"] {
+  min-height: 34px;
+  min-width: 190px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #fff;
+}
