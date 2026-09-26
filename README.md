@@ -10,7 +10,7 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
 
 ## Status
 
-ブラウザで操作できる機能拡張版（v0.9.0）まで進んでいます。
+ブラウザで操作できる機能拡張版（v0.10.0）まで進んでいます。
 
 ### 実装済み
 
@@ -161,6 +161,28 @@ JTrim 1.53c の操作感と主要機能を、HTML + CSS + JavaScript で現代�
   - 全画面表示
   - フォルダ選択との統合
   - 次画像の先読み
+- 読み込み直し
+  - FileHandleまたは元Fileから再読込
+  - 未保存変更がある場合は確認
+- 印刷 / 印刷プレビュー
+  - A4 / Letter / Legal
+  - 縦 / 横 / 自動向き
+  - 用紙に合わせる / 倍率指定 / ストレッチ
+  - 余白 / 中央配置 / 縁なし指定
+  - 実際のプリンタ選択はブラウザ / OSの印刷ダイアログ
+- 保存オプション
+  - JPEG品質 / 目標サイズ
+  - Exif保持
+  - Exif保持時の確認
+  - WebP品質
+  - localStorageへ設定保存
+- JPEG品質情報
+  - Baseline / Progressive判定
+  - 推定品質
+  - サンプリング
+  - Exif / ICC / DQT / Restart Interval
+- アンドゥ / リドゥ履歴の明示クリア
+- 内部 / システムクリップボードの明示クリア
 - Undo / Redo（16段階を基本）
 - JTrim準拠の主要ショートカット
 - GitHub Actions による JavaScript 構文チェック
