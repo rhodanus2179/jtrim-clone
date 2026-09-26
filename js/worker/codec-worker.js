@@ -3,6 +3,7 @@ import { jpegtranArgumentsForOperation } from "../codecs/jpeg-orientation.js";
 const MAX_COMPRESSED_BYTES = 512 * 1024 * 1024;
 let jpegtranFactoryPromise = null;
 let cjpegFactoryPromise = null;
+let pngFactoryPromise = null;
 const MAX_PIXELS = 180_000_000;
 
 function fail(code, message, detail = null) {
@@ -113,6 +114,69 @@ async function runCjpeg(rgbaBuffer, width, height, {
   };
 }
 
+async function loadPngFactory() {
+  if (!pngFactoryPromise) {
+    pngFactoryPromise = import("../codecs/generated/png-codec-module.js")
+      .then(module => module.default)
+      .catch(error => {
+        pngFactoryPromise = null;
+        fail(
+          "CODEC_INIT_FAILED",
+          "Interlaced PNGエンコーダを読み込めませんでした。生成済みWASMモジュールが必要です。",
+          error?.message || String(error)
+        );
+      });
+  }
+  return await pngFactoryPromise;
+}
+
+async function runPngEncode(rgbaBuffer, width, height, {
+  interlaced = false,
+  compressionLevel = 6
+} = {}) {
+  width = Math.trunc(Number(width));
+  height = Math.trunc(Number(height));
+  if (width < 1 || height < 1 || width > 30000 || height > 30000 || width * height > MAX_PIXELS) {
+    fail("PNG_MEMORY_LIMIT", "画像サイズがPNGエンコーダの安全上限を超えています。");
+  }
+  const rgba = new Uint8Array(rgbaBuffer);
+  if (rgba.byteLength !== width * height * 4) {
+    fail("PNG_INVALID_INPUT", "RGBAバッファサイズが画像寸法と一致しません。");
+  }
+
+  const createPngCodec = await loadPngFactory();
+  const module = await createPngCodec();
+  const ptr = module._malloc(rgba.byteLength);
+  if (!ptr) fail("CODEC_OUT_OF_MEMORY", "PNG入力バッファを確保できませんでした。");
+
+  try {
+    module.HEAPU8.set(rgba, ptr);
+    const rc = module._jtrim_png_encode(
+      ptr,
+      rgba.byteLength,
+      width,
+      height,
+      interlaced ? 1 : 0,
+      Math.max(0, Math.min(9, Math.round(Number(compressionLevel) || 6)))
+    );
+    if (rc !== 0) {
+      fail("PNG_ENCODE_FAILED", `PNGエンコードに失敗しました (libspng error ${rc})。`, { errorCode: rc });
+    }
+
+    const outPtr = module._jtrim_png_output_ptr();
+    const outSize = module._jtrim_png_output_size();
+    if (!outPtr || !outSize) fail("PNG_ENCODE_FAILED", "PNGエンコード結果が空です。");
+    const out = module.HEAPU8.slice(outPtr, outPtr + outSize);
+    return {
+      bytes: out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength),
+      errorCode: 0
+    };
+  } finally {
+    module._free(ptr);
+    module._jtrim_png_free_output();
+  }
+}
+
 function classifyJpegtranFailure(stderr) {
   const text = String(stderr || "");
   if (/perfect transformation is not possible|transformation is not perfect|not perfect/i.test(text)) {
@@ -204,6 +268,13 @@ self.addEventListener("message", async event => {
       });
     } else if (operation === "jpeg-encode") {
       result = await runCjpeg(
+        payload.rgba,
+        payload.width,
+        payload.height,
+        payload.options || {}
+      );
+    } else if (operation === "png-encode") {
+      result = await runPngEncode(
         payload.rgba,
         payload.width,
         payload.height,
