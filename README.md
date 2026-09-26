@@ -207,6 +207,7 @@ python -m http.server 8000
 - [実装計画](docs/implementation-plan.md)
 - [周辺機能ミニ設計](docs/peripheral-features-design.md)
 - [File System Access対応設計](docs/file-system-access-design.md)
+- [高度コーデック設計（JPEGロスレス / Progressive JPEG / Interlaced PNG）](docs/advanced-codecs-design.md)
 
 ## Fidelity goals
 
