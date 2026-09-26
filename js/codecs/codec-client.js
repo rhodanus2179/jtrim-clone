@@ -73,6 +73,29 @@ export class CodecClient {
     };
   }
 
+  async jpegEncode(imageData, options = {}) {
+    if (!imageData?.data || !imageData.width || !imageData.height) {
+      throw new TypeError("jpegEncode requires ImageData-compatible input");
+    }
+    const copy = new Uint8Array(imageData.data.byteLength);
+    copy.set(new Uint8Array(
+      imageData.data.buffer,
+      imageData.data.byteOffset,
+      imageData.data.byteLength
+    ));
+    const buffer = copy.buffer;
+    const result = await this.request("jpeg-encode", {
+      rgba: buffer,
+      width: imageData.width,
+      height: imageData.height,
+      options
+    }, [buffer]);
+    return {
+      blob: new Blob([result.bytes], { type: "image/jpeg" }),
+      stderr: result.stderr || ""
+    };
+  }
+
   async probe() {
     return await this.request("probe", {});
   }
