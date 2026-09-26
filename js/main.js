@@ -117,13 +117,22 @@ const DEFAULT_CODEC_OPTIONS = Object.freeze({
   interlaceProgressive: false
 });
 
+function rgbToHex(r, g, b) {
+  return "#" + [r, g, b]
+    .map(value => Math.max(0, Math.min(255, Number(value) || 0)).toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
 const selection = new SelectionController({
   canvas,
   overlay: overlayCanvas,
   state,
   onStatus: ({ x, y, rgba }) => {
     $("#statusPosition").textContent = `x: ${x}, y: ${y}`;
-    $("#statusColor").textContent = `RGB: ${rgba[0]}, ${rgba[1]}, ${rgba[2]}${rgba[3] < 255 ? ` / A:${rgba[3]}` : ""}`;
+    const hex = rgbToHex(rgba[0], rgba[1], rgba[2]);
+    $("#statusColor").textContent =
+      `RGB: ${rgba[0]}, ${rgba[1]}, ${rgba[2]} / HEX: ${hex}${rgba[3] < 255 ? ` / A:${rgba[3]}` : ""}`;
   }
 });
 
