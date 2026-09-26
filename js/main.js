@@ -25,6 +25,12 @@ import {
   createFileInDirectory,
   getOrCreateDirectory,
   getFileFromHandle,
+  getDroppedFileSystemHandles,
+  walkDirectory,
+  getOrCreateDirectoryPath,
+  createFileSnapshot,
+  fileSnapshotChanged,
+  isSameHandle,
   isLikelyImageName
 } from "./io/file-system-access.js";
 import { WorkspaceController } from "./workspace/workspace-controller.js";
@@ -71,8 +77,12 @@ let galleryPendingAction = null;
 let slideshowIndex = 0;
 let slideshowTimer = null;
 let selectedGalleryIndex = -1;
+let selectedGalleryIndices = new Set();
+let lastSelectedGalleryIndex = -1;
 let thumbnailObserver = null;
 let slideshowGeneration = 0;
+let slideshowOrder = [];
+let slideshowCursor = 0;
 
 const selection = new SelectionController({
   canvas,
@@ -271,10 +281,7 @@ async function loadFile(file, sourceContext = null) {
       meta.fileHandle = sourceContext.fileHandle;
       meta.parentDirectoryHandle = sourceContext.parentDirectoryHandle || null;
       meta.workspaceRelativePath = sourceContext.workspaceRelativePath || file.name;
-      meta.sourceSnapshot = {
-        size: file.size,
-        lastModified: file.lastModified
-      };
+      meta.sourceSnapshot = await createFileSnapshot(file);
     } else {
       meta.fileHandle = null;
       meta.parentDirectoryHandle = null;
@@ -3465,10 +3472,7 @@ async function updateDocumentFileHandleAfterSave(handle, type) {
   state.document.fileHandle = handle;
   state.document.fileName = handle.name || latest.name || state.document.fileName;
   state.document.sourceFormat = type;
-  state.document.sourceSnapshot = {
-    size: latest.size,
-    lastModified: latest.lastModified
-  };
+  state.document.sourceSnapshot = await createFileSnapshot(latest);
   state.markModified(false);
 }
 
@@ -3497,10 +3501,8 @@ async function overwriteCurrentDocument() {
 
     const latest = await getFileFromHandle(doc.fileHandle);
     const snapshot = doc.sourceSnapshot;
-    const changedExternally = snapshot && (
-      latest.size !== snapshot.size ||
-      latest.lastModified !== snapshot.lastModified
-    );
+    const latestSnapshot = await createFileSnapshot(latest);
+    const changedExternally = fileSnapshotChanged(snapshot, latestSnapshot);
 
     if (
       changedExternally &&
