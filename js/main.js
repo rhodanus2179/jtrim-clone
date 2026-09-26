@@ -4150,8 +4150,10 @@ async function updateDocumentFileHandleAfterSave(handle, type) {
   if (!state.document) return;
   state.document.fileHandle = handle;
   state.document.fileName = handle.name || latest.name || state.document.fileName;
+  state.document.sourceFile = latest;
   state.document.sourceFormat = type;
   state.document.sourceSnapshot = await createFileSnapshot(latest);
+  state.document.jpegInfo = type === "image/jpeg" ? await parseJpegInfo(latest) : null;
   state.markModified(false);
 }
 
@@ -4193,8 +4195,14 @@ async function overwriteCurrentDocument() {
 
     state.setBusy(true);
     setMessage(`${doc.fileName} を上書き保存しています…`);
+    const saveOptions = getSaveOptions();
+    const preserveExif = type === "image/jpeg" && saveOptions.preserveExif && Boolean(doc.exifSegment);
+    if (preserveExif && saveOptions.confirmExif && !confirm("元JPEGのExif情報を保持して上書き保存しますか？")) {
+      setMessage("上書き保存をキャンセルしました");
+      return;
+    }
     const encoded = await encodeCurrentForSave(type, {
-      preserveExif: true,
+      preserveExif,
       respectTargetMode: false
     });
     await writeBlobToFileHandle(doc.fileHandle, encoded.blob);
@@ -4215,9 +4223,17 @@ async function overwriteCurrentDocument() {
 }
 
 function openSaveDialog() {
+  const options = getSaveOptions();
   const hasExif = Boolean(state.document?.exifSegment);
+  $("#saveQuality").value = options.jpegQuality;
+  $("#saveQualityOutput").value = options.jpegQuality;
+  $("#saveTargetKb").value = options.targetKb;
+  $("#saveWebpQuality").value = options.webpQuality;
+  $("#saveWebpQualityOutput").value = options.webpQuality;
+  const mode = document.querySelector(`input[name="jpegMode"][value="${options.jpegMode}"]`);
+  if (mode) mode.checked = true;
   $("#savePreserveExif").disabled = !hasExif;
-  $("#savePreserveExif").checked = hasExif;
+  $("#savePreserveExif").checked = hasExif && options.preserveExif;
   $("#saveExifStatus").textContent = hasExif
     ? "元JPEGのExifを保持できます（Orientationは1に正規化し、画像サイズタグを更新します）。"
     : "保持できるExif情報はありません。";
@@ -4246,6 +4262,12 @@ function setupSaveDialog() {
     const type = typeSelect.value;
     const baseName = state.document?.fileName || "image";
     const preserveExif = type === "image/jpeg" && $("#savePreserveExif").checked;
+    const savedOptions = getSaveOptions();
+
+    if (preserveExif && savedOptions.confirmExif && !confirm("元JPEGのExif情報を保持して保存しますか？")) {
+      setMessage("保存をキャンセルしました");
+      return;
+    }
 
     let targetHandle = null;
     if (fsCapabilities.saveFilePicker) {
@@ -4286,6 +4308,10 @@ function setupSaveDialog() {
         setMessage(`${targetHandle.name} に保存しました (${encoded.detail})`);
       } else {
         downloadBlob(encoded.blob, baseName, type);
+        if (state.document) {
+          state.document.sourceFormat = type;
+          state.document.jpegInfo = type === "image/jpeg" ? await parseJpegInfo(encoded.blob) : null;
+        }
         state.markModified(false);
         setMessage(`保存ファイルを作成しました (${encoded.detail})`);
       }
@@ -4392,6 +4418,9 @@ function setupKeyboard() {
     let command = null;
 
     if (ctrl && event.shiftKey && key === "a") command = "file.save";
+    else if (ctrl && event.shiftKey && key === "r") command = "file.reload";
+    else if (ctrl && event.shiftKey && key === "p") command = "file.printPreview";
+    else if (ctrl && !event.shiftKey && key === "p") command = "file.print";
     else if (ctrl && !event.shiftKey && key === "s") command = "file.overwrite";
     else if (ctrl && event.altKey && key === "t") command = "file.thumbnails";
     else if (ctrl && key === "b") command = "file.batch";
@@ -4487,6 +4516,9 @@ setupNewspaperDialog();
 setupCustomFilterDialog();
 setupTextDialog();
 setupNewDialog();
+setupPrintSettingsDialog();
+setupPrintPreviewDialog();
+setupSaveOptionsDialog();
 setupSaveDialog();
 setupBatchDialog();
 setupRecentFoldersDialog();
