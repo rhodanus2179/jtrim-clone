@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.9.0</span>
+          <span class="version">v0.10.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -25,11 +25,17 @@
           <div class="menu-popup">
             <button data-command="file.new">新規作成(N)… <kbd>Ctrl+N</kbd></button>
             <button data-command="file.open">開く(O)… <kbd>Ctrl+O</kbd></button>
+            <button data-command="file.reload">読み込み直す(R) <kbd>Ctrl+Shift+R</kbd></button>
             <button data-command="file.openFolder">フォルダを開く…</button>
             <button data-command="file.recentFolders">最近使ったフォルダ…</button>
             <hr>
             <button data-command="file.overwrite">上書き保存(S) <kbd>Ctrl+S</kbd></button>
             <button data-command="file.save">名前を付けて保存(A)… <kbd>Ctrl+Shift+A</kbd></button>
+            <button data-command="file.saveOptions">保存オプション…</button>
+            <hr>
+            <button data-command="file.printSetup">印刷設定…</button>
+            <button data-command="file.print">印刷(P)… <kbd>Ctrl+P</kbd></button>
+            <button data-command="file.printPreview">印刷プレビュー… <kbd>Ctrl+Shift+P</kbd></button>
             <hr>
             <button data-command="file.thumbnails">サムネイル表示(T) <kbd>Ctrl+Alt+T</kbd></button>
             <button data-command="file.batch">一括変換(B)… <kbd>Ctrl+B</kbd></button>
@@ -52,6 +58,9 @@
             <hr>
             <button data-command="edit.selectAll">全選択／選択解除(A) <kbd>Ctrl+A</kbd></button>
             <button data-command="edit.clearSelection">選択解除</button>
+            <hr>
+            <button data-command="edit.clearHistory">アンドゥバッファをクリア</button>
+            <button data-command="edit.clearClipboard">クリップボードをクリア</button>
           </div>
         </div>
         <div class="menu">
@@ -89,6 +98,8 @@
             <button data-command="image.densityMin">最小濃度抽出</button>
             <button data-command="image.densityMedian">中間濃度抽出</button>
             <button data-command="image.densityMax">最大濃度抽出</button>
+            <hr>
+            <button data-command="image.jpegInfo">JPEG品質…</button>
             <hr>
             <button data-command="image.transparentColor">透過色設定(G)…</button>
             <button data-command="image.toggleTransparency">透過状態を表示(B)</button>
@@ -1158,6 +1169,90 @@
     </div>
   </dialog>
 
+
+  <dialog id="printSettingsDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>印刷設定</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div class="inline-fields">
+          <label>用紙
+            <select id="printPaper"><option value="a4">A4</option><option value="letter">Letter</option><option value="legal">Legal</option></select>
+          </label>
+          <label>向き
+            <select id="printOrientation"><option value="auto">自動</option><option value="portrait">縦</option><option value="landscape">横</option></select>
+          </label>
+        </div>
+        <fieldset>
+          <legend>倍率</legend>
+          <label class="check-row"><input type="radio" name="printScaleMode" value="fit" checked> 用紙に合わせる</label>
+          <label class="check-row"><input type="radio" name="printScaleMode" value="percent"> 倍率指定</label>
+          <label class="inline-fields">倍率 <input id="printScalePercent" type="number" min="10" max="500" value="100"> %</label>
+          <label class="check-row"><input type="radio" name="printScaleMode" value="stretch"> 用紙いっぱいにストレッチ</label>
+        </fieldset>
+        <fieldset>
+          <legend>配置</legend>
+          <label class="check-row"><input id="printCenter" type="checkbox" checked> 中央配置</label>
+          <label class="check-row"><input id="printBorderless" type="checkbox"> 縁なし（ブラウザ／プリンタ対応時）</label>
+          <div class="inline-fields print-margin-fields">
+            <label>上 <input id="printMarginTop" type="number" min="0" max="100" value="10"> mm</label>
+            <label>右 <input id="printMarginRight" type="number" min="0" max="100" value="10"> mm</label>
+            <label>下 <input id="printMarginBottom" type="number" min="0" max="100" value="10"> mm</label>
+            <label>左 <input id="printMarginLeft" type="number" min="0" max="100" value="10"> mm</label>
+          </div>
+        </fieldset>
+        <p class="help-text">実際のプリンタ選択・給紙・両面印刷等は、印刷時にブラウザ／OSの印刷ダイアログで設定します。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button id="printSettingsOk" class="primary" value="default">設定を保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="printPreviewDialog" class="modal print-preview-modal">
+    <div class="dialog-head"><h2>印刷プレビュー</h2><button id="printPreviewClose" class="icon-button" aria-label="閉じる">×</button></div>
+    <div class="print-preview-toolbar">
+      <button type="button" id="printPreviewSettings">印刷設定</button>
+      <span id="printPreviewSummary" class="help-text"></span>
+      <button type="button" id="printPreviewPrint" class="primary">印刷…</button>
+    </div>
+    <div class="print-preview-area">
+      <div id="printPreviewPage" class="print-preview-page"><img id="printPreviewImage" alt="印刷プレビュー"></div>
+    </div>
+  </dialog>
+
+  <dialog id="saveOptionsDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>保存オプション</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <fieldset>
+          <legend>JPEG</legend>
+          <label>既定の保存方法
+            <select id="saveOptionsJpegMode"><option value="quality">品質を指定</option><option value="target">ファイルサイズを指定</option></select>
+          </label>
+          <label class="inline-fields">既定品質 <input id="saveOptionsJpegQuality" type="number" min="1" max="100" value="92"> %</label>
+          <label class="inline-fields">既定上限 <input id="saveOptionsTargetKb" type="number" min="1" max="100000" value="500"> KB</label>
+          <label class="check-row"><input id="saveOptionsPreserveExif" type="checkbox" checked> Exifを保持する</label>
+          <label class="check-row"><input id="saveOptionsConfirmExif" type="checkbox"> Exif保持時に確認する</label>
+        </fieldset>
+        <fieldset>
+          <legend>WebP</legend>
+          <label class="inline-fields">既定品質 <input id="saveOptionsWebpQuality" type="number" min="1" max="100" value="92"> %</label>
+        </fieldset>
+        <p class="help-text">設定はこのブラウザに保存されます。元ファイルのタイムスタンプ維持はWeb APIでは任意指定できません。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button id="saveOptionsOk" class="primary" value="default">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="jpegInfoDialog" class="modal wide-modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>JPEG品質</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <div id="jpegInfoContent" class="jpeg-info-grid"></div>
+        <p class="help-text">品質値は標準輝度量子化表との比較による推定値です。エンコーダ独自の量子化表では一致しない場合があります。</p>
+      </div>
+      <div class="dialog-actions"><button class="primary" value="default">閉じる</button></div>
+    </form>
+  </dialog>
+
   <dialog id="saveDialog" class="modal">
     <form method="dialog">
       <div class="dialog-head"><h2>名前を付けて保存</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
@@ -1189,7 +1284,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.9.0</strong></p>
+        <p><strong>JTrim Web v0.10.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
@@ -1197,6 +1292,10 @@
       <div class="dialog-actions"><button class="primary" value="default">閉じる</button></div>
     </form>
   </dialog>
+
+
+  <div id="printHost" class="print-host" aria-hidden="true"><img id="printHostImage" alt=""></div>
+  <style id="dynamicPrintStyle"></style>
 
   <script type="module" src="./js/main.js"></script>
 </body>
