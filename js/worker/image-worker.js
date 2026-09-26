@@ -93,7 +93,15 @@ self.onmessage = event => {
         result = pencilImageData(source, params.selection);
         break;
       case "floodFill":
-        result = floodFillImageData(source, params.x, params.y, params.color, params.tolerance, params.opacity);
+        result = floodFillImageData(
+          source,
+          params.x,
+          params.y,
+          params.color,
+          params.tolerance,
+          params.opacity,
+          params.selection
+        );
         break;
       case "wave":
         result = waveImageData(source, params.amplitude, params.wavelength, params.direction, params.selection);
