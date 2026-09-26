@@ -4377,6 +4377,52 @@ function currentSaveQuality(type) {
   return .92;
 }
 
+async function encodeProgressiveJpeg(imageData, quality, exifSegment = null) {
+  const encoded = await codecClient.jpegEncode(imageData, {
+    quality: Math.max(1, Math.min(100, Math.round(quality * 100))),
+    progressive: true,
+    optimize: true
+  });
+  return exifSegment
+    ? await injectExif(encoded.blob, exifSegment, imageData.width, imageData.height)
+    : encoded.blob;
+}
+
+async function encodeProgressiveJpegToTargetSize(targetBytes, exifSegment = null) {
+  targetBytes = Math.max(1, Math.round(Number(targetBytes) || 1));
+  const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+  const encodeCandidate = quality => encodeProgressiveJpeg(imageData, quality, exifSegment);
+
+  const minimum = await encodeCandidate(.01);
+  if (minimum.size > targetBytes) {
+    return { blob: minimum, quality: .01, targetMet: false };
+  }
+
+  const maximum = await encodeCandidate(1);
+  if (maximum.size <= targetBytes) {
+    return { blob: maximum, quality: 1, targetMet: true };
+  }
+
+  let low = .01;
+  let high = 1;
+  let bestBlob = minimum;
+  let bestQuality = .01;
+
+  for (let i = 0; i < 8; i++) {
+    const quality = (low + high) / 2;
+    const blob = await encodeCandidate(quality);
+    if (blob.size <= targetBytes) {
+      low = quality;
+      bestBlob = blob;
+      bestQuality = quality;
+    } else {
+      high = quality;
+    }
+  }
+
+  return { blob: bestBlob, quality: bestQuality, targetMet: true };
+}
+
 async function encodeCurrentForSave(type, {
   preserveExif = true,
   respectTargetMode = false
@@ -4384,6 +4430,7 @@ async function encodeCurrentForSave(type, {
   const exifSegment = type === "image/jpeg" && preserveExif
     ? state.document?.exifSegment
     : null;
+  const progressive = type === "image/jpeg" && getCodecOptions().interlaceProgressive;
 
   if (
     type === "image/jpeg" &&
@@ -4391,13 +4438,23 @@ async function encodeCurrentForSave(type, {
     document.querySelector('input[name="jpegMode"]:checked')?.value === "target"
   ) {
     const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
-    const result = await encodeJpegToTargetSize(canvas, targetKb * 1024, { exifSegment });
+    const result = progressive
+      ? await encodeProgressiveJpegToTargetSize(targetKb * 1024, exifSegment)
+      : await encodeJpegToTargetSize(canvas, targetKb * 1024, { exifSegment });
     return {
       blob: result.blob,
-      detail: result.targetMet
-        ? `${(result.blob.size / 1024).toFixed(1)}KB / 品質約${Math.round(result.quality * 100)}`
-        : `品質1でも目標サイズ超過: ${(result.blob.size / 1024).toFixed(1)}KB`
+      detail: (progressive ? "Progressive / " : "") + (
+        result.targetMet
+          ? `${(result.blob.size / 1024).toFixed(1)}KB / 品質約${Math.round(result.quality * 100)}`
+          : `品質1でも目標サイズ超過: ${(result.blob.size / 1024).toFixed(1)}KB`
+      )
     };
+  }
+
+  if (progressive) {
+    const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+    const blob = await encodeProgressiveJpeg(imageData, currentSaveQuality(type), exifSegment);
+    return { blob, detail: `Progressive / ${(blob.size / 1024).toFixed(1)}KB` };
   }
 
   const blob = await encodeCanvas(canvas, type, currentSaveQuality(type), { exifSegment });
@@ -4496,6 +4553,9 @@ function openSaveDialog() {
   $("#saveExifStatus").textContent = hasExif
     ? "元JPEGのExifを保持できます（Orientationは1に正規化し、画像サイズタグを更新します）。"
     : "保持できるExif情報はありません。";
+  $("#saveJpegCodingStatus").textContent = getCodecOptions().interlaceProgressive
+    ? "Progressive JPEGで保存します（高度コーデックを使用）"
+    : "Sequential JPEGで保存します";
   $("#saveDialog").showModal();
 }
 
