@@ -143,5 +143,13 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "build: update browser jpegtran codec"
-          git push
+          git commit -m "build: update browser codecs"
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            if git push; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Failed to push generated codecs after retries." >&2
+          exit 1
