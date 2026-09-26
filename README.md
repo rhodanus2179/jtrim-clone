@@ -150,6 +150,7 @@ python -m http.server 8000
 - [アーキテクチャ設計](docs/architecture.md)
 - [実装計画](docs/implementation-plan.md)
 - [周辺機能ミニ設計](docs/peripheral-features-design.md)
+- [File System Access対応設計](docs/file-system-access-design.md)
 
 ## Fidelity goals
 
