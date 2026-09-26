@@ -474,6 +474,38 @@ worker 内で R/G/B/Luma 256 bin を計算する。
 - equalize
 - status/analysis
 
+## 16.5 Advanced Codec Layer
+
+通常のCanvas画像処理とは別に、圧縮フォーマット固有の高度処理を担当する Codec Layer を設ける。
+
+対象:
+
+- JPEG DCT係数レベルのロスレス回転 / 反転
+- Progressive / Sequential JPEG
+- Adam7 Interlaced PNG
+
+構成:
+
+```text
+Source JPEG Blob / Canvas RGBA
+          |
+          v
+     Codec Client
+          |
+          v
+     Codec Worker
+       /      \
+JPEG WASM    PNG WASM
+          |
+          v
+        Blob
+```
+
+通常の JPEG / PNG 保存では既存の Canvas native encoder を維持する。
+高度機能を要求された場合だけ WASM を lazy-load する。
+
+詳細は `docs/advanced-codecs-design.md` を参照。
+
 ## 17. Worker 設計
 
 重い処理は Worker に委譲する。
