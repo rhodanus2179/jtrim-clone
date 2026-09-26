@@ -3956,6 +3956,42 @@ function setupSaveDialog() {
   });
 }
 
+async function handleDroppedDataTransfer(dataTransfer) {
+  if (!dataTransfer) return false;
+
+  const handles = await getDroppedFileSystemHandles(dataTransfer);
+  const directoryHandle = handles.find(handle => handle?.kind === "directory");
+  if (directoryHandle) {
+    await activateWorkspaceHandle(directoryHandle);
+    return true;
+  }
+
+  const fileHandle = handles.find(handle => handle?.kind === "file" && isLikelyImageName(handle.name));
+  if (fileHandle) {
+    const file = await getFileFromHandle(fileHandle);
+    if (file?.type?.startsWith("image/")) {
+      await loadFile(file, {
+        fileHandle,
+        parentDirectoryHandle: null,
+        workspaceRelativePath: file.name
+      });
+      return true;
+    }
+  }
+
+  const files = [...(dataTransfer.files || [])].filter(file => file.type.startsWith("image/"));
+  if (files.length === 1) {
+    await loadFile(files[0]);
+    return true;
+  }
+  if (files.length > 1) {
+    setGalleryFiles(files);
+    await openThumbnails();
+    return true;
+  }
+  return false;
+}
+
 function setupFileInput() {
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files?.[0];
@@ -3963,15 +3999,31 @@ function setupFileInput() {
     fileInput.value = "";
   });
 
-  workspace.addEventListener("dragover", event => {
+  const allowDrop = event => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-  });
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  };
 
+  workspace.addEventListener("dragover", allowDrop);
   workspace.addEventListener("drop", async event => {
     event.preventDefault();
-    const file = [...event.dataTransfer.files].find(f => f.type.startsWith("image/"));
-    if (file) await loadFile(file);
+    try {
+      await handleDroppedDataTransfer(event.dataTransfer);
+    } catch (error) {
+      console.error(error);
+      alert(`ドロップした項目を開けませんでした。\n${error.message || error}`);
+    }
+  });
+
+  $("#thumbnailGrid").addEventListener("dragover", allowDrop);
+  $("#thumbnailGrid").addEventListener("drop", async event => {
+    event.preventDefault();
+    try {
+      await handleDroppedDataTransfer(event.dataTransfer);
+    } catch (error) {
+      console.error(error);
+      alert(`ドロップした項目を開けませんでした。\n${error.message || error}`);
+    }
   });
 }
 
