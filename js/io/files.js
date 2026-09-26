@@ -41,17 +41,72 @@ function compositeForJpeg(canvas) {
   return temp;
 }
 
-export function saveCanvas(canvas, type = "image/png", quality = .92, baseName = "image") {
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("画像をエンコードできませんでした")), type, quality);
+  });
+}
+
+function extensionForType(type) {
+  return type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
+}
+
+export async function encodeCanvas(canvas, type = "image/png", quality = .92) {
   const source = type === "image/jpeg" ? compositeForJpeg(canvas) : canvas;
-  const extension = type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
+  return await canvasToBlob(source, type, quality);
+}
+
+export async function encodeJpegToTargetSize(canvas, targetBytes, {
+  minQuality = .01,
+  maxQuality = 1,
+  iterations = 8
+} = {}) {
+  const source = compositeForJpeg(canvas);
+  targetBytes = Math.max(1, Math.round(Number(targetBytes) || 1));
+
+  const minimum = await canvasToBlob(source, "image/jpeg", minQuality);
+  if (minimum.size > targetBytes) {
+    return { blob: minimum, quality: minQuality, targetMet: false };
+  }
+
+  const maximum = await canvasToBlob(source, "image/jpeg", maxQuality);
+  if (maximum.size <= targetBytes) {
+    return { blob: maximum, quality: maxQuality, targetMet: true };
+  }
+
+  let low = minQuality;
+  let high = maxQuality;
+  let bestBlob = minimum;
+  let bestQuality = minQuality;
+
+  for (let i = 0; i < iterations; i++) {
+    const quality = (low + high) / 2;
+    const blob = await canvasToBlob(source, "image/jpeg", quality);
+    if (blob.size <= targetBytes) {
+      low = quality;
+      bestBlob = blob;
+      bestQuality = quality;
+    } else {
+      high = quality;
+    }
+  }
+
+  return { blob: bestBlob, quality: bestQuality, targetMet: true };
+}
+
+export function downloadBlob(blob, baseName = "image", type = blob.type || "image/png") {
+  const extension = extensionForType(type);
   const safeBase = (baseName || "image").replace(/\.[^.]+$/, "").replace(/[\\/:*?"<>|]+/g, "_") || "image";
-  source.toBlob(blob => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${safeBase}.${extension}`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-  }, type, quality);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${safeBase}.${extension}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+export async function saveCanvas(canvas, type = "image/png", quality = .92, baseName = "image") {
+  const blob = await encodeCanvas(canvas, type, quality);
+  downloadBlob(blob, baseName, type);
+  return blob;
 }
