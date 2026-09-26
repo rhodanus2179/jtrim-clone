@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.10.0</span>
+          <span class="version">v0.11.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -100,6 +100,8 @@
             <button data-command="image.densityMax">最大濃度抽出</button>
             <hr>
             <button data-command="image.jpegInfo">JPEG品質…</button>
+            <button data-command="image.jpegLossless">JPEGロスレス回転／反転… <kbd>Ctrl+J</kbd></button>
+            <button id="interlaceMenuItem" data-command="image.toggleInterlace">インターレース／プログレッシブ(I) <kbd>Ctrl+I</kbd></button>
             <hr>
             <button data-command="image.transparentColor">透過色設定(G)…</button>
             <button data-command="image.toggleTransparency">透過状態を表示(B)</button>
@@ -1242,6 +1244,32 @@
     </form>
   </dialog>
 
+
+  <dialog id="jpegLosslessDialog" class="modal">
+    <form method="dialog">
+      <div class="dialog-head"><h2>JPEGロスレス回転／反転</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
+      <div class="dialog-body">
+        <fieldset>
+          <legend>処理</legend>
+          <label class="check-row"><input type="radio" name="jpegLosslessOperation" value="rotate90" checked> 右へ90度</label>
+          <label class="check-row"><input type="radio" name="jpegLosslessOperation" value="rotate270"> 左へ90度</label>
+          <label class="check-row"><input type="radio" name="jpegLosslessOperation" value="rotate180"> 180度</label>
+          <label class="check-row"><input type="radio" name="jpegLosslessOperation" value="flipH"> 左右反転</label>
+          <label class="check-row"><input type="radio" name="jpegLosslessOperation" value="flipV"> 上下反転</label>
+        </fieldset>
+        <fieldset>
+          <legend>端の処理</legend>
+          <label class="check-row"><input type="radio" name="jpegLosslessEdge" value="perfect" checked> 完全にロスレスな場合のみ実行（推奨）</label>
+          <label class="check-row"><input type="radio" name="jpegLosslessEdge" value="trim"> 再圧縮せず、変換できない端をトリミング</label>
+        </fieldset>
+        <label class="check-row"><input id="jpegLosslessPreserveProgressive" type="checkbox" checked> Progressive / Baseline形式を維持</label>
+        <p id="jpegLosslessSourceInfo" class="help-text"></p>
+        <p class="help-text">この処理はCanvasを再圧縮せず、元JPEGのDCT係数を直接変換します。未保存の通常編集は破棄されます。</p>
+      </div>
+      <div class="dialog-actions"><button value="cancel">キャンセル</button><button id="jpegLosslessOk" class="primary" value="default">実行</button></div>
+    </form>
+  </dialog>
+
   <dialog id="jpegInfoDialog" class="modal wide-modal">
     <form method="dialog">
       <div class="dialog-head"><h2>JPEG品質</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
@@ -1284,7 +1312,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.10.0</strong></p>
+        <p><strong>JTrim Web v0.11.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
