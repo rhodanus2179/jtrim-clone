@@ -30,6 +30,36 @@ export async function pickWorkspaceDirectory({
   return await window.showDirectoryPicker({ mode, id, startIn });
 }
 
+export async function pickSaveFileHandle({
+  suggestedName = "image.png",
+  type = "image/png",
+  id = "jtrim-save"
+} = {}) {
+  if (typeof window?.showSaveFilePicker !== "function") {
+    throw new Error("showSaveFilePicker() はこのブラウザでは利用できません。");
+  }
+
+  const extensions = type === "image/jpeg"
+    ? [".jpg", ".jpeg"]
+    : type === "image/webp"
+      ? [".webp"]
+      : [".png"];
+  const description = type === "image/jpeg"
+    ? "JPEG画像"
+    : type === "image/webp"
+      ? "WebP画像"
+      : "PNG画像";
+
+  return await window.showSaveFilePicker({
+    id,
+    suggestedName,
+    types: [{
+      description,
+      accept: { [type]: extensions }
+    }]
+  });
+}
+
 export async function pickOutputDirectory({
   id = "jtrim-output",
   startIn = "pictures"
