@@ -42,7 +42,7 @@ import {
   resolvedOrientation,
   printCss
 } from "./io/print.js";
-import { parseJpegInfo } from "./io/jpeg-info.js";
+import { parseJpegInfo, jpegSubsamplingCode } from "./io/jpeg-info.js";
 import { extractExifSegment, injectExif, readExifOrientation } from "./io/jpeg-exif.js";
 import { CodecClient, CodecError } from "./codecs/codec-client.js";
 import { composeJpegTransform } from "./codecs/jpeg-orientation.js";
@@ -109,6 +109,7 @@ const DEFAULT_SAVE_OPTIONS = Object.freeze({
   targetKb: 500,
   preserveExif: true,
   confirmExif: false,
+  preserveJpegData: true,
   webpQuality: 92
 });
 
@@ -177,6 +178,13 @@ async function readSystemClipboardImage() {
 
 function documentReady() {
   return Boolean(state.document) && !state.busy;
+}
+
+function markPixelModified() {
+  if (state.document?.jpegSourceState) {
+    state.document.jpegSourceState.pristine = false;
+  }
+  state.markModified(true);
 }
 
 function updateDocumentDimensions() {
@@ -301,7 +309,7 @@ async function commitPreview(label) {
   imageCtx.clearRect(0, 0, canvas.width, canvas.height);
   imageCtx.drawImage(previewCanvas, 0, 0);
   hidePreview();
-  state.markModified(true);
+  markPixelModified();
   setMessage(`${label}を適用しました`);
 }
 
@@ -403,7 +411,7 @@ async function mutate(label, operation, { clearSelection = false } = {}) {
     await history.snapshot(canvas, label);
     await operation();
     if (clearSelection) state.clearSelection();
-    state.markModified(true);
+    markPixelModified();
     syncLayers();
     setMessage(`${label}を適用しました`);
   } catch (error) {
@@ -481,7 +489,7 @@ function setupCommands() {
         hidePreview();
         await history.undo(canvas);
         state.clearSelection();
-        state.markModified(true);
+        markPixelModified();
         syncLayers();
         state.setBusy(false);
         setMessage("元に戻しました");
@@ -494,7 +502,7 @@ function setupCommands() {
         hidePreview();
         await history.redo(canvas);
         state.clearSelection();
-        state.markModified(true);
+        markPixelModified();
         syncLayers();
         state.setBusy(false);
         setMessage("やり直しました");
@@ -1150,7 +1158,7 @@ function setupTextDialog() {
     await history.snapshot(canvas, "文字入れ");
     drawText(canvas, currentTextOptions());
     hidePreview();
-    state.markModified(true);
+    markPixelModified();
     $("#textDialog").close();
     setMessage("文字を追加しました");
     refreshUI();
@@ -3953,6 +3961,7 @@ function getSaveOptions() {
     targetKb: Math.max(1, Math.min(100000, Number(raw.targetKb) || 500)),
     preserveExif: raw.preserveExif !== false,
     confirmExif: Boolean(raw.confirmExif),
+    preserveJpegData: raw.preserveJpegData !== false,
     webpQuality: Math.max(1, Math.min(100, Number(raw.webpQuality) || 92))
   };
 }
@@ -3964,6 +3973,7 @@ function openSaveOptionsDialog() {
   $("#saveOptionsTargetKb").value = options.targetKb;
   $("#saveOptionsPreserveExif").checked = options.preserveExif;
   $("#saveOptionsConfirmExif").checked = options.confirmExif;
+  $("#saveOptionsPreserveJpegData").checked = options.preserveJpegData;
   $("#saveOptionsWebpQuality").value = options.webpQuality;
   $("#saveOptionsDialog").showModal();
 }
@@ -3977,6 +3987,7 @@ function setupSaveOptionsDialog() {
       targetKb: Number($("#saveOptionsTargetKb").value),
       preserveExif: $("#saveOptionsPreserveExif").checked,
       confirmExif: $("#saveOptionsConfirmExif").checked,
+      preserveJpegData: $("#saveOptionsPreserveJpegData").checked,
       webpQuality: Number($("#saveOptionsWebpQuality").value)
     };
     writePreference("save-options", options);
