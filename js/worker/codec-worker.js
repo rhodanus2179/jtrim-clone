@@ -69,7 +69,8 @@ function rgbaToPpm(rgbaBuffer, width, height) {
 async function runCjpeg(rgbaBuffer, width, height, {
   quality = 92,
   progressive = false,
-  optimize = true
+  optimize = true,
+  subsampling = null
 } = {}) {
   width = Math.trunc(Number(width));
   height = Math.trunc(Number(height));
@@ -87,6 +88,13 @@ async function runCjpeg(rgbaBuffer, width, height, {
   });
   module.FS.writeFile("/input.ppm", rgbaToPpm(rgbaBuffer, width, height));
   const args = ["-quality", String(quality)];
+  const sampleMap = {
+    "444": "1x1,1x1,1x1",
+    "422": "2x1,1x1,1x1",
+    "420": "2x2,1x1,1x1",
+    "440": "1x2,1x1,1x1"
+  };
+  if (sampleMap[subsampling]) args.push("-sample", sampleMap[subsampling]);
   if (progressive) args.push("-progressive");
   if (optimize) args.push("-optimize");
   args.push("-outfile", "/output.jpg", "/input.ppm");
