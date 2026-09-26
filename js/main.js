@@ -2799,6 +2799,7 @@ function setupSaveDialog() {
         });
         setMessage(`保存ファイルを作成しました (${(blob.size / 1024).toFixed(1)}KB)`);
       }
+      state.markModified(false);
     } catch (error) {
       console.error(error);
       alert(`保存に失敗しました。\n${error.message || error}`);
