@@ -111,9 +111,9 @@ self.addEventListener("message", async event => {
       result = await runJpegtran(payload.bytes, payload.options || {});
     } else if (operation === "jpeg-transcode") {
       result = await runJpegtran(payload.bytes, {
+        ...(payload.options || {}),
         operation: "identity",
-        edgePolicy: "none",
-        ...payload.options
+        edgePolicy: "none"
       });
     } else {
       fail("CODEC_UNKNOWN_OPERATION", `Unknown codec operation: ${operation}`);
