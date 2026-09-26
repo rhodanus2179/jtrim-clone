@@ -367,3 +367,51 @@ progress {
   border-radius: 6px;
   background: #fff;
 }
+
+
+.recent-folders-list {
+  display: grid;
+  gap: 8px;
+}
+.recent-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.recent-folder-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.recent-folder-info strong,
+.recent-folder-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-folder-info span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.recent-folder-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.permission-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  border: 1px solid var(--border);
+}
+.permission-granted { background: #eaf7ee; color: #176c36; border-color: #b8dfc3; }
+.permission-prompt { background: #fff6df; color: #765500; border-color: #e6d18d; }
+.permission-denied { background: #fff0ef; color: #a62b22; border-color: #efc2be; }
