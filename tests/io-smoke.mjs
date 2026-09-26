@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import {
   extractExifSegment,
   prepareExifSegment,
-  injectExif
+  injectExif,
+  readExifOrientation
 } from "../js/io/jpeg-exif.js";
 import { createZip } from "../js/io/zip.js";
 
@@ -49,6 +50,7 @@ const jpeg = new Blob([
 const extracted = await extractExifSegment(jpeg);
 assert.ok(extracted, "Exif should be extracted");
 assert.equal(extracted.length, exif.length);
+assert.equal(readExifOrientation(extracted), 6, "Exif Orientation should be readable");
 
 const prepared = prepareExifSegment(extracted, 640, 480);
 const preparedView = new DataView(prepared.buffer, prepared.byteOffset, prepared.byteLength);
