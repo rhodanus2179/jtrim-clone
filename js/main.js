@@ -19,6 +19,7 @@ import {
   pickWorkspaceDirectory,
   pickOutputDirectory,
   pickSaveFileHandle,
+  queryHandlePermission,
   ensureHandlePermission,
   writeBlobToFileHandle,
   createFileInDirectory,
@@ -27,6 +28,13 @@ import {
   isLikelyImageName
 } from "./io/file-system-access.js";
 import { WorkspaceController } from "./workspace/workspace-controller.js";
+import {
+  recentHandleStoreAvailable,
+  listRecentDirectories,
+  saveRecentDirectory,
+  removeRecentDirectory,
+  clearRecentDirectories
+} from "./io/handle-store.js";
 
 const state = new AppState();
 const history = new HistoryManager(16);
@@ -323,6 +331,10 @@ function setupCommands() {
     .register("file.openFolder", {
       run: openWorkspaceFolder,
       enabled: () => !state.busy && fsCapabilities.directoryPicker
+    })
+    .register("file.recentFolders", {
+      run: openRecentFoldersDialog,
+      enabled: () => !state.busy && fsCapabilities.directoryPicker && recentHandleStoreAvailable()
     })
     .register("file.overwrite", {
       run: overwriteCurrentDocument,
@@ -2788,6 +2800,107 @@ function setupBatchDialog() {
   });
 }
 
+
+function recentPermissionLabel(status) {
+  if (status === "granted") return "許可済み";
+  if (status === "prompt") return "再接続が必要";
+  if (status === "denied") return "アクセスなし";
+  return "状態不明";
+}
+
+async function renderRecentFolders() {
+  const list = $("#recentFoldersList");
+  const empty = $("#recentFoldersEmpty");
+  list.replaceChildren();
+
+  if (!recentHandleStoreAvailable()) {
+    empty.hidden = false;
+    empty.textContent = "このブラウザでは最近使ったフォルダを保存できません。";
+    return;
+  }
+
+  let records = [];
+  try {
+    records = await listRecentDirectories();
+  } catch (error) {
+    console.error(error);
+    empty.hidden = false;
+    empty.textContent = "最近使ったフォルダを読み込めませんでした。";
+    return;
+  }
+
+  empty.hidden = records.length > 0;
+  empty.textContent = "最近使ったフォルダはありません。";
+
+  for (const record of records) {
+    const row = document.createElement("div");
+    row.className = "recent-folder-row";
+
+    const info = document.createElement("div");
+    info.className = "recent-folder-info";
+    const name = document.createElement("strong");
+    name.textContent = record.name;
+    const meta = document.createElement("span");
+    meta.textContent = new Date(record.lastUsedAt).toLocaleString("ja-JP");
+    info.append(name, meta);
+
+    const status = await queryHandlePermission(record.handle, { write: false });
+    const badge = document.createElement("span");
+    badge.className = `permission-badge permission-${status}`;
+    badge.textContent = recentPermissionLabel(status);
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.textContent = status === "granted" ? "開く" : "再接続";
+    open.disabled = status === "denied";
+    open.addEventListener("click", async () => {
+      try {
+        const granted = status === "granted" || await ensureHandlePermission(record.handle, {
+          write: false,
+          request: true
+        });
+        if (!granted) {
+          setMessage("フォルダへのアクセスが許可されませんでした");
+          return;
+        }
+        $("#recentFoldersDialog").close();
+        await activateWorkspaceHandle(record.handle);
+      } catch (error) {
+        console.error(error);
+        alert(`フォルダへ再接続できませんでした。\n${error.message || error}`);
+      }
+    });
+
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.textContent = "履歴から削除";
+    forget.addEventListener("click", async () => {
+      await removeRecentDirectory(record.id);
+      await renderRecentFolders();
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "recent-folder-actions";
+    actions.append(badge, open, forget);
+    row.append(info, actions);
+    list.append(row);
+  }
+}
+
+function openRecentFoldersDialog() {
+  if (!$("#recentFoldersDialog").open) $("#recentFoldersDialog").showModal();
+  void renderRecentFolders();
+}
+
+function setupRecentFoldersDialog() {
+  $("#recentFoldersClear").addEventListener("click", async () => {
+    if (!confirm("最近使ったフォルダの履歴をすべて消去しますか？")) return;
+    await clearRecentDirectories();
+    await renderRecentFolders();
+    setMessage("最近使ったフォルダの履歴を消去しました");
+  });
+}
+
 function releaseGalleryUrls() {
   thumbnailObserver?.disconnect();
   thumbnailObserver = null;
@@ -2825,6 +2938,25 @@ function setGalleryFiles(files) {
   selectedGalleryIndex = -1;
 }
 
+async function activateWorkspaceHandle(handle, { remember = true } = {}) {
+  state.setBusy(true);
+  try {
+    setMessage(`${handle.name} を読み込んでいます…`);
+    await folderWorkspace.openRoot(handle);
+    if (remember && recentHandleStoreAvailable()) {
+      await saveRecentDirectory(handle, { preferredMode: "read", maxEntries: 10 }).catch(error => {
+        console.debug("Recent directory handle could not be stored:", error);
+      });
+    }
+    await rebuildWorkspaceGallery();
+    await openThumbnails();
+    setMessage(`${handle.name} をフォルダとして開きました`);
+  } finally {
+    state.setBusy(false);
+    refreshUI();
+  }
+}
+
 async function openWorkspaceFolder() {
   if (!fsCapabilities.directoryPicker) {
     alert("このブラウザではフォルダ直接アクセスを利用できません。複数ファイル選択をご利用ください。");
@@ -2835,14 +2967,9 @@ async function openWorkspaceFolder() {
     const handle = await pickWorkspaceDirectory({
       mode: "read",
       id: "jtrim-workspace",
-      startIn: "pictures"
+      startIn: folderWorkspace.currentHandle || "pictures"
     });
-    state.setBusy(true);
-    setMessage(`${handle.name} を読み込んでいます…`);
-    await folderWorkspace.openRoot(handle);
-    await rebuildWorkspaceGallery();
-    openThumbnails();
-    setMessage(`${handle.name} をフォルダとして開きました`);
+    await activateWorkspaceHandle(handle);
   } catch (error) {
     if (error?.name === "AbortError") {
       setMessage("フォルダ選択をキャンセルしました");
@@ -2851,9 +2978,6 @@ async function openWorkspaceFolder() {
     console.error(error);
     alert(`フォルダを開けませんでした。\n${error.message || error}`);
     setMessage("フォルダを開けませんでした");
-  } finally {
-    state.setBusy(false);
-    refreshUI();
   }
 }
 
@@ -3632,6 +3756,7 @@ setupTextDialog();
 setupNewDialog();
 setupSaveDialog();
 setupBatchDialog();
+setupRecentFoldersDialog();
 setupGallery();
 setupFileInput();
 setupZoom();
