@@ -16,7 +16,9 @@ jobs:
       - name: Check JavaScript syntax
         run: find js -type f -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Check worker module imports
-        run: node --input-type=module -e "globalThis.self={}; await import('./js/worker/image-worker.js')"
+        run: |
+          node --input-type=module -e "globalThis.self={}; await import('./js/worker/image-worker.js')"
+          node --input-type=module -e "globalThis.self={addEventListener(){},postMessage(){}}; await import('./js/worker/codec-worker.js')"
       - name: Check IO module imports
         run: node --input-type=module -e "await import('./js/io/files.js'); await import('./js/io/jpeg-exif.js'); await import('./js/io/jpeg-info.js'); await import('./js/io/print.js'); await import('./js/io/zip.js'); await import('./js/io/file-system-access.js'); await import('./js/io/handle-store.js'); await import('./js/workspace/workspace-controller.js'); await import('./js/preferences.js')"
       - name: Run IO smoke tests
@@ -25,6 +27,8 @@ jobs:
         run: node tests/file-system-access-smoke.mjs
       - name: Run JPEG / print smoke tests
         run: node tests/jpeg-print-smoke.mjs
+      - name: Run advanced JPEG codec smoke tests
+        run: node tests/advanced-codec-smoke.mjs
       - name: Check required entry files
         run: |
           test -f index.html
