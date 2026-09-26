@@ -84,6 +84,8 @@ let thumbnailObserver = null;
 let slideshowGeneration = 0;
 let slideshowOrder = [];
 let slideshowCursor = 0;
+let galleryLoadMoreObserver = null;
+let renderedGalleryCount = 0;
 
 const selection = new SelectionController({
   canvas,
@@ -3052,7 +3054,10 @@ function setGalleryFiles(files) {
   selectedGalleryIndex = -1;
 }
 
-async function activateWorkspaceHandle(handle, { remember = true } = {}) {
+async function activateWorkspaceHandle(handle, {
+  remember = true,
+  openView = "thumbnails"
+} = {}) {
   state.setBusy(true);
   try {
     setMessage(`${handle.name} を読み込んでいます…`);
@@ -3062,8 +3067,9 @@ async function activateWorkspaceHandle(handle, { remember = true } = {}) {
         console.debug("Recent directory handle could not be stored:", error);
       });
     }
-    await rebuildWorkspaceGallery();
-    await openThumbnails();
+    await rebuildWorkspaceGallery({ render: false });
+    if (openView === "slideshow") openSlideshow();
+    else await openThumbnails();
     setMessage(`${handle.name} をフォルダとして開きました`);
   } finally {
     state.setBusy(false);
@@ -3071,7 +3077,7 @@ async function activateWorkspaceHandle(handle, { remember = true } = {}) {
   }
 }
 
-async function openWorkspaceFolder() {
+async function openWorkspaceFolder({ openView = "thumbnails" } = {}) {
   if (!fsCapabilities.directoryPicker) {
     alert("このブラウザではフォルダ直接アクセスを利用できません。複数ファイル選択をご利用ください。");
     return;
@@ -3083,7 +3089,7 @@ async function openWorkspaceFolder() {
       id: "jtrim-workspace",
       startIn: folderWorkspace.currentHandle || "pictures"
     });
-    await activateWorkspaceHandle(handle);
+    await activateWorkspaceHandle(handle, { openView });
   } catch (error) {
     if (error?.name === "AbortError") {
       setMessage("フォルダ選択をキャンセルしました");
