@@ -3032,6 +3032,8 @@ function clearGallery() {
   galleryItems = [];
   slideshowIndex = 0;
   selectedGalleryIndex = -1;
+  selectedGalleryIndices.clear();
+  lastSelectedGalleryIndex = -1;
 }
 
 function setGalleryFiles(files) {
@@ -3223,11 +3225,50 @@ async function openGalleryItem(item) {
   } : null);
 }
 
-function selectGalleryItem(index) {
-  selectedGalleryIndex = index;
-  for (const [i, node] of [...$("#thumbnailGrid").querySelectorAll(".thumbnail-item")].entries()) {
-    node.classList.toggle("selected", i === index);
+function updateGallerySelectionUI() {
+  $("#gallerySelectionCount").textContent = `選択 ${selectedGalleryIndices.size}件`;
+  $("#galleryBatchSelected").disabled = ![...selectedGalleryIndices].some(index => {
+    const item = galleryItems[index];
+    return item?.kind === "file" && isLikelyImageName(item.name);
+  });
+  for (const node of $("#thumbnailGrid").querySelectorAll(".thumbnail-item")) {
+    const index = Number(node.dataset.index);
+    node.classList.toggle("selected", selectedGalleryIndices.has(index));
+    node.setAttribute("aria-selected", selectedGalleryIndices.has(index) ? "true" : "false");
   }
+}
+
+function selectGalleryItem(index, {
+  toggle = false,
+  range = false,
+  additive = false
+} = {}) {
+  if (index < 0 || index >= galleryItems.length) return;
+  selectedGalleryIndex = index;
+
+  if (range && lastSelectedGalleryIndex >= 0) {
+    if (!additive) selectedGalleryIndices.clear();
+    const from = Math.min(lastSelectedGalleryIndex, index);
+    const to = Math.max(lastSelectedGalleryIndex, index);
+    for (let i = from; i <= to; i++) selectedGalleryIndices.add(i);
+  } else if (toggle) {
+    if (selectedGalleryIndices.has(index)) selectedGalleryIndices.delete(index);
+    else selectedGalleryIndices.add(index);
+    lastSelectedGalleryIndex = index;
+  } else {
+    selectedGalleryIndices.clear();
+    selectedGalleryIndices.add(index);
+    lastSelectedGalleryIndex = index;
+  }
+
+  updateGallerySelectionUI();
+}
+
+function clearGallerySelection() {
+  selectedGalleryIndex = -1;
+  lastSelectedGalleryIndex = -1;
+  selectedGalleryIndices.clear();
+  updateGallerySelectionUI();
 }
 
 function formatGalleryMeta(item) {
@@ -3239,9 +3280,7 @@ function formatGalleryMeta(item) {
       : `${(item.size / 1024 / 1024).toFixed(1)} MB`;
     parts.push(size);
   }
-  if (item.lastModified) {
-    parts.push(new Date(item.lastModified).toLocaleDateString("ja-JP"));
-  }
+  if (item.lastModified) parts.push(new Date(item.lastModified).toLocaleDateString("ja-JP"));
   return parts.join(" · ");
 }
 
@@ -3257,7 +3296,7 @@ function createThumbnailObserver() {
     }
   }, {
     root: $("#thumbnailGrid"),
-    rootMargin: "320px"
+    rootMargin: "360px"
   });
   return thumbnailObserver;
 }
@@ -3276,15 +3315,119 @@ async function loadThumbnail(index, button) {
     placeholder?.replaceWith(img);
     const meta = button.querySelector(".thumbnail-meta");
     if (meta) meta.textContent = formatGalleryMeta(item);
-  } catch (error) {
+  } catch {
     const placeholder = button.querySelector(".thumbnail-loading");
     if (placeholder) placeholder.textContent = "読込失敗";
   }
 }
 
+function createGalleryCard(item, index, observer) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `thumbnail-item${item.kind === "directory" ? " directory" : ""}`;
+  button.title = item.name;
+  button.dataset.index = String(index);
+  button.setAttribute("role", "option");
+  button.setAttribute("aria-selected", selectedGalleryIndices.has(index) ? "true" : "false");
+
+  let preview;
+  if (item.kind === "directory") {
+    preview = document.createElement("div");
+    preview.className = "thumbnail-folder-icon";
+    preview.textContent = "📁";
+  } else if (isLikelyImageName(item.name)) {
+    preview = document.createElement("div");
+    preview.className = "thumbnail-loading";
+    preview.textContent = "読込待ち";
+  } else {
+    preview = document.createElement("div");
+    preview.className = "thumbnail-folder-icon";
+    preview.textContent = "📄";
+  }
+
+  const text = document.createElement("div");
+  text.className = "thumbnail-text";
+  const name = document.createElement("span");
+  name.textContent = item.name;
+  const meta = document.createElement("small");
+  meta.className = "thumbnail-meta";
+  meta.textContent = formatGalleryMeta(item);
+  text.append(name, meta);
+
+  button.append(preview, text);
+  button.classList.toggle("selected", selectedGalleryIndices.has(index));
+  button.addEventListener("click", event => {
+    selectGalleryItem(index, {
+      toggle: event.ctrlKey || event.metaKey,
+      range: event.shiftKey,
+      additive: event.ctrlKey || event.metaKey
+    });
+  });
+  button.addEventListener("dblclick", async () => {
+    if (item.kind === "file") {
+      const slides = getSlideshowItems();
+      const slideIndex = slides.indexOf(item);
+      if (slideIndex >= 0) slideshowIndex = slideIndex;
+    }
+    await openGalleryItem(item);
+  });
+
+  if (item.kind === "file" && isLikelyImageName(item.name)) {
+    if (observer) observer.observe(button);
+    else void loadThumbnail(index, button);
+  }
+  return button;
+}
+
+const GALLERY_CHUNK_SIZE = 240;
+
+function appendGalleryChunk(observer) {
+  const grid = $("#thumbnailGrid");
+  grid.querySelector(".gallery-load-more-sentinel")?.remove();
+
+  const end = Math.min(galleryItems.length, renderedGalleryCount + GALLERY_CHUNK_SIZE);
+  const fragment = document.createDocumentFragment();
+  for (let index = renderedGalleryCount; index < end; index++) {
+    fragment.append(createGalleryCard(galleryItems[index], index, observer));
+  }
+  grid.append(fragment);
+  renderedGalleryCount = end;
+  updateGallerySelectionUI();
+
+  if (renderedGalleryCount < galleryItems.length) {
+    const sentinel = document.createElement("div");
+    sentinel.className = "gallery-load-more-sentinel";
+    sentinel.textContent = `${renderedGalleryCount.toLocaleString()} / ${galleryItems.length.toLocaleString()}件を表示中…`;
+    grid.append(sentinel);
+    galleryLoadMoreObserver?.observe(sentinel);
+  }
+}
+
+function ensureGalleryIndexRendered(index, observer = thumbnailObserver) {
+  while (index >= renderedGalleryCount && renderedGalleryCount < galleryItems.length) {
+    appendGalleryChunk(observer);
+  }
+}
+
+function createGalleryLoadMoreObserver(observer) {
+  galleryLoadMoreObserver?.disconnect();
+  if (typeof IntersectionObserver === "undefined") return null;
+  galleryLoadMoreObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      galleryLoadMoreObserver.unobserve(entry.target);
+      appendGalleryChunk(observer);
+    }
+  }, { root: $("#thumbnailGrid"), rootMargin: "700px" });
+  return galleryLoadMoreObserver;
+}
+
 async function renderThumbnails() {
   const grid = $("#thumbnailGrid");
+  thumbnailObserver?.disconnect();
+  galleryLoadMoreObserver?.disconnect();
   grid.replaceChildren();
+  renderedGalleryCount = 0;
   renderWorkspaceChrome();
 
   if (folderWorkspace.active) {
@@ -3294,57 +3437,11 @@ async function renderThumbnails() {
   }
 
   const observer = createThumbnailObserver();
+  createGalleryLoadMoreObserver(observer);
+  appendGalleryChunk(observer);
 
-  galleryItems.forEach((item, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `thumbnail-item${item.kind === "directory" ? " directory" : ""}`;
-    button.title = item.name;
-    button.dataset.index = String(index);
-
-    let preview;
-    if (item.kind === "directory") {
-      preview = document.createElement("div");
-      preview.className = "thumbnail-folder-icon";
-      preview.textContent = "📁";
-    } else if (isLikelyImageName(item.name)) {
-      preview = document.createElement("div");
-      preview.className = "thumbnail-loading";
-      preview.textContent = "読込待ち";
-    } else {
-      preview = document.createElement("div");
-      preview.className = "thumbnail-folder-icon";
-      preview.textContent = "📄";
-    }
-
-    const text = document.createElement("div");
-    text.className = "thumbnail-text";
-    const name = document.createElement("span");
-    name.textContent = item.name;
-    const meta = document.createElement("small");
-    meta.className = "thumbnail-meta";
-    meta.textContent = formatGalleryMeta(item);
-    text.append(name, meta);
-
-    button.append(preview, text);
-    button.addEventListener("click", () => selectGalleryItem(index));
-    button.addEventListener("dblclick", async () => {
-      if (item.kind === "file") {
-        const slides = getSlideshowItems();
-        const slideIndex = slides.indexOf(item);
-        if (slideIndex >= 0) slideshowIndex = slideIndex;
-      }
-      await openGalleryItem(item);
-    });
-    grid.append(button);
-
-    if (item.kind === "file" && isLikelyImageName(item.name)) {
-      if (observer) observer.observe(button);
-      else void loadThumbnail(index, button);
-    }
-  });
-
-  if (galleryItems.length) selectGalleryItem(0);
+  if (galleryItems.length && selectedGalleryIndex < 0) selectGalleryItem(0);
+  else updateGallerySelectionUI();
 }
 
 async function openThumbnails() {
@@ -3379,6 +3476,24 @@ function getSlideshowItems() {
   );
 }
 
+function nextSlideshowIndex(direction = 1) {
+  const slides = getSlideshowItems();
+  if (!slides.length) return null;
+
+  if ($("#slideshowRandom").checked && slides.length > 1) {
+    let next = slideshowIndex;
+    for (let tries = 0; tries < 8 && next === slideshowIndex; tries++) {
+      next = Math.floor(Math.random() * slides.length);
+    }
+    return next;
+  }
+
+  const candidate = slideshowIndex + direction;
+  if ($("#slideshowLoop").checked) return (candidate + slides.length) % slides.length;
+  if (candidate < 0 || candidate >= slides.length) return null;
+  return candidate;
+}
+
 async function showSlide(index) {
   const slides = getSlideshowItems();
   if (!slides.length) {
@@ -3389,7 +3504,12 @@ async function showSlide(index) {
     return;
   }
 
-  slideshowIndex = (index + slides.length) % slides.length;
+  if (index < 0 || index >= slides.length) {
+    if ($("#slideshowLoop").checked) index = (index + slides.length) % slides.length;
+    else index = Math.max(0, Math.min(slides.length - 1, index));
+  }
+
+  slideshowIndex = index;
   const item = slides[slideshowIndex];
   const generation = ++slideshowGeneration;
   $("#slideshowEmpty").hidden = false;
@@ -3405,12 +3525,24 @@ async function showSlide(index) {
     $("#slideshowImage").alt = item.name;
     $("#slideshowName").textContent = item.name;
     $("#slideshowPosition").textContent = `${slideshowIndex + 1} / ${slides.length}`;
+
+    const next = nextSlideshowIndex(1);
+    if (next != null && next !== slideshowIndex) void ensureGalleryUrl(slides[next]);
   } catch {
     if (generation !== slideshowGeneration) return;
     $("#slideshowImage").hidden = true;
     $("#slideshowEmpty").hidden = false;
     $("#slideshowEmpty").textContent = "画像を読み込めませんでした。";
   }
+}
+
+async function advanceSlideshow(direction = 1) {
+  const next = nextSlideshowIndex(direction);
+  if (next == null) {
+    stopSlideshow();
+    return;
+  }
+  await showSlide(next);
 }
 
 function stopSlideshow() {
@@ -3423,7 +3555,7 @@ function stopSlideshow() {
 function startSlideshow() {
   stopSlideshow();
   const seconds = Math.max(1, Number($("#slideshowInterval").value) || 3);
-  slideshowTimer = setInterval(() => void showSlide(slideshowIndex + 1), seconds * 1000);
+  slideshowTimer = setInterval(() => void advanceSlideshow(1), seconds * 1000);
   $("#slideshowPlay").textContent = "⏸ 停止";
 }
 
@@ -3435,6 +3567,39 @@ function toggleSlideshow() {
 function openSlideshow() {
   void showSlide(slideshowIndex);
   if (!$("#slideshowDialog").open) $("#slideshowDialog").showModal();
+  $("#slideshowFolder").disabled = !fsCapabilities.directoryPicker;
+}
+
+function selectedItemsForBatch() {
+  return [...selectedGalleryIndices]
+    .sort((a, b) => a - b)
+    .map(index => galleryItems[index])
+    .filter(item => item?.kind === "file" && isLikelyImageName(item.name))
+    .map(item => ({
+      name: item.name,
+      relativePath: item.name,
+      file: item.file || null,
+      handle: item.handle || null,
+      parentHandle: folderWorkspace.active ? folderWorkspace.currentHandle : null
+    }));
+}
+
+function galleryColumns() {
+  const grid = $("#thumbnailGrid");
+  const first = grid.querySelector(".thumbnail-item");
+  if (!first) return 1;
+  const width = first.getBoundingClientRect().width;
+  const gap = 12;
+  return Math.max(1, Math.floor((grid.clientWidth + gap) / (width + gap)));
+}
+
+async function moveGallerySelection(nextIndex) {
+  nextIndex = Math.max(0, Math.min(galleryItems.length - 1, nextIndex));
+  ensureGalleryIndexRendered(nextIndex);
+  selectGalleryItem(nextIndex);
+  const node = $("#thumbnailGrid").querySelector(`.thumbnail-item[data-index="${nextIndex}"]`);
+  node?.focus({ preventScroll: true });
+  node?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 function setupGallery() {
@@ -3493,23 +3658,77 @@ function setupGallery() {
     folderWorkspace.setFilter({ imageOnly: event.target.checked });
     await rebuildWorkspaceGallery();
   });
+  $("#galleryThumbSize").addEventListener("change", event => {
+    $("#thumbnailGrid").dataset.thumbSize = event.target.value;
+  });
+  $("#thumbnailGrid").dataset.thumbSize = $("#galleryThumbSize").value;
+
+  $("#galleryBatchSelected").addEventListener("click", () => {
+    const selected = selectedItemsForBatch();
+    if (!selected.length) return;
+    batchItems = selected;
+    batchSourceMode = "selection";
+    $("#batchRecursive").checked = false;
+    $("#thumbnailDialog").close();
+    openBatchDialog();
+  });
 
   $("#thumbnailGrid").addEventListener("keydown", async event => {
-    if (event.key === "Enter" && selectedGalleryIndex >= 0) {
+    if (!galleryItems.length) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+      event.preventDefault();
+      selectedGalleryIndices = new Set(galleryItems.map((_, index) => index));
+      selectedGalleryIndex = Math.max(0, selectedGalleryIndex);
+      updateGallerySelectionUI();
+      return;
+    }
+
+    let next = selectedGalleryIndex < 0 ? 0 : selectedGalleryIndex;
+    const columns = galleryColumns();
+    if (event.key === "ArrowLeft") next -= 1;
+    else if (event.key === "ArrowRight") next += 1;
+    else if (event.key === "ArrowUp") next -= columns;
+    else if (event.key === "ArrowDown") next += columns;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = galleryItems.length - 1;
+    else if (event.key === "Enter" && selectedGalleryIndex >= 0) {
       event.preventDefault();
       await openGalleryItem(galleryItems[selectedGalleryIndex]);
-    }
+      return;
+    } else if (event.code === "Space" && selectedGalleryIndex >= 0) {
+      event.preventDefault();
+      selectGalleryItem(selectedGalleryIndex, { toggle: true });
+      return;
+    } else return;
+
+    event.preventDefault();
+    await moveGallerySelection(next);
   });
 
   $("#slideshowFiles").addEventListener("click", () => {
     galleryPendingAction = "slideshow";
     $("#galleryFileInput").click();
   });
-  $("#slideshowPrev").addEventListener("click", () => void showSlide(slideshowIndex - 1));
-  $("#slideshowNext").addEventListener("click", () => void showSlide(slideshowIndex + 1));
+  $("#slideshowFolder").addEventListener("click", async () => {
+    $("#slideshowDialog").close();
+    await openWorkspaceFolder({ openView: "slideshow" });
+  });
+  $("#slideshowPrev").addEventListener("click", () => void advanceSlideshow(-1));
+  $("#slideshowNext").addEventListener("click", () => void advanceSlideshow(1));
   $("#slideshowPlay").addEventListener("click", toggleSlideshow);
   $("#slideshowInterval").addEventListener("change", () => {
     if (slideshowTimer) startSlideshow();
+  });
+  $("#slideshowRandom").addEventListener("change", () => {
+    if (slideshowTimer) startSlideshow();
+  });
+  $("#slideshowFullscreen").addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await $("#slideshowDialog").requestFullscreen();
+    } catch (error) {
+      console.debug("Fullscreen unavailable:", error);
+    }
   });
   $("#slideshowClose").addEventListener("click", () => $("#slideshowDialog").close());
   $("#slideshowDialog").addEventListener("close", stopSlideshow);
@@ -3517,13 +3736,16 @@ function setupGallery() {
   $("#slideshowDialog").addEventListener("keydown", event => {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      void showSlide(slideshowIndex - 1);
+      void advanceSlideshow(-1);
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
-      void showSlide(slideshowIndex + 1);
+      void advanceSlideshow(1);
     } else if (event.code === "Space") {
       event.preventDefault();
       toggleSlideshow();
+    } else if (event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      $("#slideshowFullscreen").click();
     }
   });
 
