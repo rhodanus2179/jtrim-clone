@@ -52,13 +52,17 @@ jobs:
           sed -i 's/^#define SIZEOF_SIZE_T.*$/#define SIZEOF_SIZE_T 4/' jconfigint.h
           sed -i 's/^#define SIZEOF_UNSIGNED_LONG.*$/#define SIZEOF_UNSIGNED_LONG 4/' jconfigint.h
           grep -E 'SIZEOF_(SIZE_T|UNSIGNED_LONG)' jconfigint.h
-          cmake --build . --target jpegtran-static --parallel 2
-          find . -maxdepth 2 -type f -name 'jpegtran*.js' -print
-          BUILT=$(find . -maxdepth 2 -type f -name 'jpegtran*.js' | head -n1)
-          test -n "$BUILT"
+          cmake --build . --target jpegtran-static cjpeg-static --parallel 2
+          find . -maxdepth 2 -type f \( -name 'jpegtran*.js' -o -name 'cjpeg*.js' \) -print
+          JPEGTRAN=$(find . -maxdepth 2 -type f -name 'jpegtran*.js' | head -n1)
+          CJPEG=$(find . -maxdepth 2 -type f -name 'cjpeg*.js' | head -n1)
+          test -n "$JPEGTRAN"
+          test -n "$CJPEG"
           mkdir -p "$GITHUB_WORKSPACE/js/codecs/generated"
-          cp "$BUILT" "$GITHUB_WORKSPACE/js/codecs/generated/jpegtran-module.js"
+          cp "$JPEGTRAN" "$GITHUB_WORKSPACE/js/codecs/generated/jpegtran-module.js"
+          cp "$CJPEG" "$GITHUB_WORKSPACE/js/codecs/generated/cjpeg-module.js"
           printf '\n// Generated from libjpeg-turbo 3.2.0 by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/jpegtran-module.js"
+          printf '\n// Generated from libjpeg-turbo 3.2.0 by .github/workflows/rebuild-codecs.yml\n' >> "$GITHUB_WORKSPACE/js/codecs/generated/cjpeg-module.js"
 
       - name: Copy third-party notices
         shell: bash
@@ -98,12 +102,41 @@ jobs:
           im.verify()
           print("jpegtran WASM smoke test passed")
           PY
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import createCjpeg from './js/codecs/generated/cjpeg-module.js';
+          const mod = await createCjpeg({ noInitialRun: true, print: () => {}, printErr: console.error });
+          const width = 16, height = 8;
+          const header = Buffer.from(`P6\n${width} ${height}\n255\n`);
+          const pixels = Buffer.alloc(width * height * 3);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const i = (y * width + x) * 3;
+              pixels[i] = (x * 17) & 255;
+              pixels[i + 1] = (y * 31) & 255;
+              pixels[i + 2] = ((x + y) * 13) & 255;
+            }
+          }
+          mod.FS.writeFile('/input.ppm', Buffer.concat([header, pixels]));
+          mod.callMain(['-quality','90','-progressive','-outfile','/progressive.jpg','/input.ppm']);
+          const out = mod.FS.readFile('/progressive.jpg');
+          if (out.length < 100) throw new Error('cjpeg output is unexpectedly small');
+          fs.writeFileSync('/tmp/progressive.jpg', out);
+          NODE
+          python - <<'PY'
+          from PIL import Image
+          im = Image.open("/tmp/progressive.jpg")
+          assert im.size == (16, 8), im.size
+          assert im.info.get("progressive") or im.info.get("progression"), im.info
+          im.verify()
+          print("cjpeg progressive WASM smoke test passed")
+          PY
 
       - name: Commit generated codec
         shell: bash
         run: |
           set -euo pipefail
-          git add js/codecs/generated/jpegtran-module.js third_party/libjpeg-turbo/LICENSE.md third_party/libjpeg-turbo/README.ijg
+          git add js/codecs/generated/jpegtran-module.js js/codecs/generated/cjpeg-module.js third_party/libjpeg-turbo/LICENSE.md third_party/libjpeg-turbo/README.ijg
           if git diff --cached --quiet; then
             echo "Generated codec is unchanged."
             exit 0
