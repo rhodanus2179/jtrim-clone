@@ -52,7 +52,11 @@ function canvasToBlob(canvas, type, quality) {
 }
 
 function extensionForType(type) {
-  return type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
+  if (type === "image/png") return "png";
+  if (type === "image/jpeg") return "jpg";
+  if (type === "image/webp") return "webp";
+  if (type === "application/zip") return "zip";
+  return "bin";
 }
 
 export async function encodeCanvas(canvas, type = "image/png", quality = .92, {
