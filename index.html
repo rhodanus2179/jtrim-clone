@@ -1234,6 +1234,7 @@
           <label class="inline-fields">既定上限 <input id="saveOptionsTargetKb" type="number" min="1" max="100000" value="500"> KB</label>
           <label class="check-row"><input id="saveOptionsPreserveExif" type="checkbox" checked> Exifを保持する</label>
           <label class="check-row"><input id="saveOptionsConfirmExif" type="checkbox"> Exif保持時に確認する</label>
+          <label class="check-row"><input id="saveOptionsPreserveJpegData" type="checkbox" checked> 未編集JPEGは可能なら再圧縮しない</label>
         </fieldset>
         <fieldset>
           <legend>WebP</legend>
@@ -1298,6 +1299,8 @@
             <label class="inline-fields">最大 <input id="saveTargetKb" type="number" min="1" max="100000" value="500"> KB</label>
             <p class="help-text">指定サイズ以下に収まる範囲で、できるだけ高いJPEG品質を二分探索します。</p>
             <p id="saveJpegCodingStatus" class="help-text">Sequential JPEGで保存</p>
+            <label class="check-row"><input id="savePreserveJpegData" type="checkbox" checked> 未編集JPEGは元のDCTデータを再利用（再圧縮なし）</label>
+            <p id="savePreserveJpegDataStatus" class="help-text"></p>
             <label class="check-row"><input id="savePreserveExif" type="checkbox" checked> Exifを保持</label>
             <p id="saveExifStatus" class="help-text">Exif情報なし</p>
           </fieldset>
