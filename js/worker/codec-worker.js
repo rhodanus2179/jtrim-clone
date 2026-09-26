@@ -2,6 +2,8 @@ import { jpegtranArgumentsForOperation } from "../codecs/jpeg-orientation.js";
 
 const MAX_COMPRESSED_BYTES = 512 * 1024 * 1024;
 let jpegtranFactoryPromise = null;
+let cjpegFactoryPromise = null;
+const MAX_PIXELS = 180_000_000;
 
 function fail(code, message, detail = null) {
   const error = new Error(message);
@@ -24,6 +26,91 @@ async function loadJpegtranFactory() {
       });
   }
   return await jpegtranFactoryPromise;
+}
+
+async function loadCjpegFactory() {
+  if (!cjpegFactoryPromise) {
+    cjpegFactoryPromise = import("../codecs/generated/cjpeg-module.js")
+      .then(module => module.default)
+      .catch(error => {
+        cjpegFactoryPromise = null;
+        fail(
+          "CODEC_INIT_FAILED",
+          "Progressive JPEGエンコーダを読み込めませんでした。生成済みWASMモジュールが必要です。",
+          error?.message || String(error)
+        );
+      });
+  }
+  return await cjpegFactoryPromise;
+}
+
+function rgbaToPpm(rgbaBuffer, width, height) {
+  const rgba = new Uint8Array(rgbaBuffer);
+  if (rgba.length !== width * height * 4) {
+    fail("JPEG_INVALID_INPUT", "RGBAバッファサイズが画像寸法と一致しません。");
+  }
+  const header = new TextEncoder().encode(`P6\n${width} ${height}\n255\n`);
+  const ppm = new Uint8Array(header.length + width * height * 3);
+  ppm.set(header, 0);
+  let src = 0;
+  let dst = header.length;
+  while (src < rgba.length) {
+    const a = rgba[src + 3] / 255;
+    ppm[dst] = Math.round(rgba[src] * a + 255 * (1 - a));
+    ppm[dst + 1] = Math.round(rgba[src + 1] * a + 255 * (1 - a));
+    ppm[dst + 2] = Math.round(rgba[src + 2] * a + 255 * (1 - a));
+    src += 4;
+    dst += 3;
+  }
+  return ppm;
+}
+
+async function runCjpeg(rgbaBuffer, width, height, {
+  quality = 92,
+  progressive = false,
+  optimize = true
+} = {}) {
+  width = Math.trunc(Number(width));
+  height = Math.trunc(Number(height));
+  if (width < 1 || height < 1 || width > 30000 || height > 30000 || width * height > MAX_PIXELS) {
+    fail("JPEG_MEMORY_LIMIT", "画像サイズが高度JPEGエンコーダの安全上限を超えています。");
+  }
+  quality = Math.max(1, Math.min(100, Math.round(Number(quality) || 92)));
+
+  const createCjpeg = await loadCjpegFactory();
+  const stderr = [];
+  const module = await createCjpeg({
+    noInitialRun: true,
+    print: () => {},
+    printErr: line => stderr.push(String(line))
+  });
+  module.FS.writeFile("/input.ppm", rgbaToPpm(rgbaBuffer, width, height));
+  const args = ["-quality", String(quality)];
+  if (progressive) args.push("-progressive");
+  if (optimize) args.push("-optimize");
+  args.push("-outfile", "/output.jpg", "/input.ppm");
+
+  try {
+    module.callMain(args);
+  } catch (error) {
+    fail(
+      "JPEG_ENCODE_FAILED",
+      "JPEGエンコードに失敗しました。",
+      stderr.join("\n") || error?.message || String(error)
+    );
+  }
+
+  let output;
+  try {
+    output = module.FS.readFile("/output.jpg");
+  } catch {
+    fail("JPEG_ENCODE_FAILED", "JPEGエンコード結果を取得できませんでした。", stderr.join("\n"));
+  }
+
+  return {
+    bytes: output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength),
+    stderr: stderr.join("\n")
+  };
 }
 
 function classifyJpegtranFailure(stderr) {
@@ -105,8 +192,8 @@ self.addEventListener("message", async event => {
   try {
     let result;
     if (operation === "probe") {
-      const factory = await loadJpegtranFactory();
-      result = { jpegtran: typeof factory === "function" };
+      const jpegtran = await loadJpegtranFactory();
+      result = { jpegtran: typeof jpegtran === "function" };
     } else if (operation === "jpeg-transform") {
       result = await runJpegtran(payload.bytes, payload.options || {});
     } else if (operation === "jpeg-transcode") {
@@ -115,6 +202,13 @@ self.addEventListener("message", async event => {
         operation: "identity",
         edgePolicy: "none"
       });
+    } else if (operation === "jpeg-encode") {
+      result = await runCjpeg(
+        payload.rgba,
+        payload.width,
+        payload.height,
+        payload.options || {}
+      );
     } else {
       fail("CODEC_UNKNOWN_OPERATION", `Unknown codec operation: ${operation}`);
     }
