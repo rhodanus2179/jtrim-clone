@@ -151,10 +151,16 @@ input[type="color"] { width: 42px; height: 32px; border: 1px solid var(--border)
   width: min(1080px, calc(100vw - 36px));
   height: min(780px, calc(100vh - 36px));
 }
+.gallery-modal form {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
 .gallery-body {
   grid-template-rows: auto 1fr;
   min-height: 0;
-  height: calc(100% - 116px);
+  height: auto;
+  overflow: hidden;
 }
 .thumbnail-grid {
   min-height: 0;
