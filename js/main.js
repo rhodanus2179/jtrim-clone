@@ -2824,14 +2824,15 @@ async function processBatchFile(file, options) {
   }
 
   const exifSegment = options.type === "image/jpeg" && options.preserveExif ? meta.exifSegment : null;
-  if (options.type === "image/jpeg" && options.interlaceProgressive) {
+  const sourceSubsampling = options.grayscale ? "gray" : jpegSubsamplingCode(meta.jpegInfo);
+  if (options.type === "image/jpeg" && (options.interlaceProgressive || sourceSubsampling)) {
     const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
     const imageData = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
     const encoded = await codecClient.jpegEncode(imageData, {
       quality: Math.round(options.quality * 100),
-      progressive: true,
+      progressive: options.interlaceProgressive,
       optimize: true,
-      subsampling: options.grayscale ? "gray" : jpegSubsamplingCode(meta.jpegInfo)
+      subsampling: sourceSubsampling
     });
     return exifSegment
       ? await injectExif(encoded.blob, exifSegment, workCanvas.width, workCanvas.height)
@@ -4437,10 +4438,13 @@ async function reusablePristineJpegSource({ preserveExif = true } = {}) {
   return { sourceFile, info };
 }
 
-async function encodeProgressiveJpeg(imageData, quality, exifSegment = null, subsampling = null) {
+async function encodeAdvancedJpeg(imageData, quality, exifSegment = null, {
+  progressive = false,
+  subsampling = null
+} = {}) {
   const encoded = await codecClient.jpegEncode(imageData, {
     quality: Math.max(1, Math.min(100, Math.round(quality * 100))),
-    progressive: true,
+    progressive,
     optimize: true,
     subsampling
   });
@@ -4449,10 +4453,16 @@ async function encodeProgressiveJpeg(imageData, quality, exifSegment = null, sub
     : encoded.blob;
 }
 
-async function encodeProgressiveJpegToTargetSize(targetBytes, exifSegment = null, subsampling = null) {
+async function encodeAdvancedJpegToTargetSize(targetBytes, exifSegment = null, {
+  progressive = false,
+  subsampling = null
+} = {}) {
   targetBytes = Math.max(1, Math.round(Number(targetBytes) || 1));
   const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
-  const encodeCandidate = quality => encodeProgressiveJpeg(imageData, quality, exifSegment, subsampling);
+  const encodeCandidate = quality => encodeAdvancedJpeg(imageData, quality, exifSegment, {
+    progressive,
+    subsampling
+  });
 
   const minimum = await encodeCandidate(.01);
   if (minimum.size > targetBytes) {
@@ -4525,15 +4535,20 @@ async function encodeCurrentForSave(type, {
   }
 
   const subsampling = jpegSubsamplingCode(state.document?.jpegInfo);
+  const useAdvancedJpeg = type === "image/jpeg" && (progressive || Boolean(subsampling));
 
   if (targetMode) {
     const targetKb = Math.max(1, Number($("#saveTargetKb").value) || 1);
-    const result = progressive
-      ? await encodeProgressiveJpegToTargetSize(targetKb * 1024, exifSegment, subsampling)
+    const result = useAdvancedJpeg
+      ? await encodeAdvancedJpegToTargetSize(targetKb * 1024, exifSegment, {
+          progressive,
+          subsampling
+        })
       : await encodeJpegToTargetSize(canvas, targetKb * 1024, { exifSegment });
     return {
       blob: result.blob,
-      detail: (progressive ? "Progressive / " : "") + (
+      detail: (progressive ? "Progressive / " : "Sequential / ") +
+        (subsampling ? `${subsampling} / ` : "") + (
         result.targetMet
           ? `${(result.blob.size / 1024).toFixed(1)}KB / 品質約${Math.round(result.quality * 100)}`
           : `品質1でも目標サイズ超過: ${(result.blob.size / 1024).toFixed(1)}KB`
@@ -4541,17 +4556,17 @@ async function encodeCurrentForSave(type, {
     };
   }
 
-  if (progressive) {
+  if (useAdvancedJpeg) {
     const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
-    const blob = await encodeProgressiveJpeg(
+    const blob = await encodeAdvancedJpeg(
       imageData,
       currentSaveQuality(type),
       exifSegment,
-      subsampling
+      { progressive, subsampling }
     );
     return {
       blob,
-      detail: `Progressive / ${subsampling ? `${subsampling} / ` : ""}${(blob.size / 1024).toFixed(1)}KB`
+      detail: `${progressive ? "Progressive" : "Sequential"} / ${subsampling ? `${subsampling} / ` : ""}${(blob.size / 1024).toFixed(1)}KB`
     };
   }
 
