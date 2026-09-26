@@ -214,6 +214,12 @@ function refreshUI() {
     ? `選択: ${Math.round(s.x)},${Math.round(s.y)} / ${Math.round(s.width)}×${Math.round(s.height)}`
     : "選択なし";
 
+  const codecOptions = getCodecOptions();
+  const interlaceLabel = $("#interlaceMenuLabel");
+  if (interlaceLabel) {
+    interlaceLabel.textContent = `${codecOptions.interlaceProgressive ? "✓ " : ""}インターレース／プログレッシブ(I)`;
+  }
+
   commands.refresh();
   selection.render();
 }
@@ -3887,6 +3893,30 @@ function setupGallery() {
 
 
 
+function getCodecOptions() {
+  const raw = readPreference("codec-options", DEFAULT_CODEC_OPTIONS);
+  return {
+    interlaceProgressive: Boolean(raw.interlaceProgressive)
+  };
+}
+
+function toggleInterlaceProgressive() {
+  const current = getCodecOptions();
+  const next = { interlaceProgressive: !current.interlaceProgressive };
+  writePreference("codec-options", next);
+  setMessage(next.interlaceProgressive
+    ? "インターレース／プログレッシブ保存を有効にしました"
+    : "インターレース／プログレッシブ保存を無効にしました");
+  refreshUI();
+}
+
+function hasCurrentJpegSource() {
+  const doc = state.document;
+  if (!doc) return false;
+  const jpeg = doc.sourceFormat === "image/jpeg" || /\.jpe?g$/i.test(doc.fileName || "");
+  return jpeg && Boolean(doc.fileHandle || doc.sourceFile);
+}
+
 function getSaveOptions() {
   const raw = readPreference("save-options", DEFAULT_SAVE_OPTIONS);
   return {
@@ -4456,6 +4486,8 @@ function setupKeyboard() {
     else if (ctrl && key === "u") command = "image.coordinateCrop";
     else if (ctrl && key === "m") command = "image.flipH";
     else if (ctrl && key === "f") command = "image.flipV";
+    else if (ctrl && key === "j") command = "image.jpegLossless";
+    else if (ctrl && key === "i") command = "image.toggleInterlace";
     else if (ctrl && key === "g") command = "color.grayscale";
     else if (ctrl && (event.key === "+" || event.key === "=")) command = "view.zoomIn";
     else if (ctrl && event.key === "-") command = "view.zoomOut";
@@ -4535,6 +4567,7 @@ setupTextDialog();
 setupNewDialog();
 setupPrintSettingsDialog();
 setupPrintPreviewDialog();
+setupJpegLosslessDialog();
 setupSaveOptionsDialog();
 setupSaveDialog();
 setupBatchDialog();
