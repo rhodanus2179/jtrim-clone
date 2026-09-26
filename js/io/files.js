@@ -19,7 +19,8 @@ export async function decodeFileToCanvas(file, canvas) {
     height: canvas.height,
     modified: false,
     exifSegment,
-    jpegInfo
+    jpegInfo,
+    jpegSourceState: isJpeg ? { pristine: true } : null
   };
 }
 
@@ -36,7 +37,8 @@ export function createBlankCanvas(canvas, width, height, color = "#ffffff") {
     height,
     modified: true,
     exifSegment: null,
-    jpegInfo: null
+    jpegInfo: null,
+    jpegSourceState: null
   };
 }
 
