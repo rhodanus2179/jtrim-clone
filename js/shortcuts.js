@@ -37,6 +37,7 @@ function normalizedKey(event) {
 
 export function shortcutMatches(event, shortcut) {
   if (!shortcut) return false;
+  if (event.getModifierState?.("AltGraph")) return false;
   const primaryPressed = Boolean(event.ctrlKey || event.metaKey);
   if (primaryPressed !== Boolean(shortcut.primary)) return false;
   if (Boolean(event.altKey) !== Boolean(shortcut.alt)) return false;
