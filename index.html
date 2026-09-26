@@ -512,20 +512,49 @@
     </form>
   </dialog>
 
-  <dialog id="fillDialog" class="modal">
+  <dialog id="fillDialog" class="modal fill-tool-dialog">
     <form method="dialog">
-      <div class="dialog-head"><h2>塗りつぶし</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
-      <div class="dialog-body">
-        <div class="inline-fields">
-          <label>X <input id="fillX" type="number" min="0" value="0"></label>
-          <label>Y <input id="fillY" type="number" min="0" value="0"></label>
-          <label>色 <input id="fillColor" type="color" value="#ffffff"></label>
-        </div>
-        <label class="slider-row"><span>許容範囲</span><input id="fillToleranceRange" type="range" min="0" max="255" value="20"><input id="fillToleranceNumber" type="number" min="0" max="255" value="20"></label>
-        <label class="slider-row"><span>不透明率</span><input id="fillOpacityRange" type="range" min="0" max="100" value="100"><input id="fillOpacityNumber" type="number" min="0" max="100" value="100"></label>
-        <p class="help-text">X/Yは塗りつぶし開始点です。選択範囲がある場合、その左上を初期値にします。</p>
+      <div class="dialog-head">
+        <h2>塗りつぶし</h2>
+        <button value="close" class="icon-button" aria-label="閉じる">×</button>
       </div>
-      <div class="dialog-actions"><button value="cancel">キャンセル</button><button class="primary" id="fillOk" value="default">OK</button></div>
+      <div class="dialog-body">
+        <fieldset>
+          <legend>塗りつぶし色</legend>
+          <div class="fill-color-pair">
+            <label class="fill-color-choice">
+              <span>左クリック</span>
+              <input id="fillLeftColor" type="color" value="#ffffff">
+              <code id="fillLeftColorHex">#FFFFFF</code>
+            </label>
+            <label class="fill-color-choice">
+              <span>右クリック</span>
+              <input id="fillRightColor" type="color" value="#000000">
+              <code id="fillRightColorHex">#000000</code>
+            </label>
+          </div>
+        </fieldset>
+        <label class="slider-row">
+          <span>許容範囲</span>
+          <input id="fillToleranceRange" type="range" min="0" max="100" value="8">
+          <input id="fillToleranceNumber" type="number" min="0" max="100" value="8" aria-label="許容範囲 パーセント">
+        </label>
+        <label class="slider-row">
+          <span>不透明度</span>
+          <input id="fillOpacityRange" type="range" min="0" max="100" value="100">
+          <input id="fillOpacityNumber" type="number" min="0" max="100" value="100" aria-label="不透明度 パーセント">
+        </label>
+        <div class="fill-tool-row">
+          <button type="button" id="fillEyedropper" aria-pressed="false">スポイト</button>
+          <span id="fillModeStatus" class="help-text">塗りつぶしモード</span>
+        </div>
+        <p class="help-text">画像を左／右クリックすると、そのピクセルを基準色として連結領域を塗ります。許容範囲は0～100%です。</p>
+        <p class="help-text">選択範囲がある場合は、その範囲を越えて塗りません。スポイトONでは左／右クリックで対応する色を取得します。</p>
+      </div>
+      <div class="dialog-actions">
+        <span class="help-text fill-dialog-hint">ダイアログを開いたまま画像を操作できます</span>
+        <button class="primary" value="close">閉じる</button>
+      </div>
     </form>
   </dialog>
 
