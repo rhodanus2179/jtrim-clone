@@ -2720,9 +2720,9 @@ function updateBatchOutputAvailability() {
 
   const recursive = $("#batchRecursive");
   const preserve = $("#batchPreserveStructure");
-  const progressive = $("#batchProgressiveJpeg");
+  const progressive = $("#batchInterlaceProgressive");
   if (progressive) {
-    progressive.disabled = $("#batchType").value !== "image/jpeg";
+    progressive.disabled = !["image/jpeg", "image/png"].includes($("#batchType").value);
   }
   if (recursive) recursive.disabled = batchSourceMode !== "workspace" || !folderWorkspace.active;
   if (preserve) preserve.disabled = !(recursive?.checked && batchSourceMode === "workspace");
@@ -2741,7 +2741,7 @@ function updateBatchOutputAvailability() {
 
 function openBatchDialog() {
   $("#batchUseWorkspace").hidden = !folderWorkspace.active;
-  $("#batchProgressiveJpeg").checked = getCodecOptions().interlaceProgressive;
+  $("#batchInterlaceProgressive").checked = getCodecOptions().interlaceProgressive;
   if (folderWorkspace.active && (batchSourceMode === "workspace" || !batchItems.length)) {
     batchItems = batchItemsFromWorkspace();
     batchSourceMode = "workspace";
@@ -2816,7 +2816,7 @@ async function processBatchFile(file, options) {
   }
 
   const exifSegment = options.type === "image/jpeg" && options.preserveExif ? meta.exifSegment : null;
-  if (options.type === "image/jpeg" && options.progressiveJpeg) {
+  if (options.type === "image/jpeg" && options.interlaceProgressive) {
     const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
     const imageData = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
     const encoded = await codecClient.jpegEncode(imageData, {
@@ -2827,6 +2827,15 @@ async function processBatchFile(file, options) {
     return exifSegment
       ? await injectExif(encoded.blob, exifSegment, workCanvas.width, workCanvas.height)
       : encoded.blob;
+  }
+
+  if (options.type === "image/png" && options.interlaceProgressive) {
+    const currentCtx = workCanvas.getContext("2d", { willReadFrequently: true });
+    const imageData = currentCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
+    return (await codecClient.pngEncode(imageData, {
+      interlaced: true,
+      compressionLevel: 6
+    })).blob;
   }
 
   return await encodeCanvas(workCanvas, options.type, options.quality, { exifSegment });
@@ -2959,7 +2968,7 @@ function setupBatchDialog() {
       type: $("#batchType").value,
       quality: Math.max(.01, Math.min(1, Number($("#batchQuality").value) / 100)),
       preserveExif: $("#batchPreserveExif").checked,
-      progressiveJpeg: $("#batchType").value === "image/jpeg" && $("#batchProgressiveJpeg").checked,
+      interlaceProgressive: ["image/jpeg", "image/png"].includes($("#batchType").value) && $("#batchInterlaceProgressive").checked,
       resize: $("#batchResize").checked,
       width: Number($("#batchWidth").value),
       height: Number($("#batchHeight").value),
@@ -4449,7 +4458,9 @@ async function encodeCurrentForSave(type, {
   const exifSegment = type === "image/jpeg" && preserveExif
     ? state.document?.exifSegment
     : null;
-  const progressive = type === "image/jpeg" && getCodecOptions().interlaceProgressive;
+  const advancedScan = getCodecOptions().interlaceProgressive;
+  const progressive = type === "image/jpeg" && advancedScan;
+  const interlacedPng = type === "image/png" && advancedScan;
 
   if (
     type === "image/jpeg" &&
@@ -4474,6 +4485,15 @@ async function encodeCurrentForSave(type, {
     const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
     const blob = await encodeProgressiveJpeg(imageData, currentSaveQuality(type), exifSegment);
     return { blob, detail: `Progressive / ${(blob.size / 1024).toFixed(1)}KB` };
+  }
+
+  if (interlacedPng) {
+    const imageData = imageCtx.getImageData(0, 0, canvas.width, canvas.height);
+    const encoded = await codecClient.pngEncode(imageData, {
+      interlaced: true,
+      compressionLevel: 6
+    });
+    return { blob: encoded.blob, detail: `Adam7 / ${(encoded.blob.size / 1024).toFixed(1)}KB` };
   }
 
   const blob = await encodeCanvas(canvas, type, currentSaveQuality(type), { exifSegment });
@@ -4572,9 +4592,13 @@ function openSaveDialog() {
   $("#saveExifStatus").textContent = hasExif
     ? "元JPEGのExifを保持できます（Orientationは1に正規化し、画像サイズタグを更新します）。"
     : "保持できるExif情報はありません。";
-  $("#saveJpegCodingStatus").textContent = getCodecOptions().interlaceProgressive
+  const advancedScan = getCodecOptions().interlaceProgressive;
+  $("#saveJpegCodingStatus").textContent = advancedScan
     ? "Progressive JPEGで保存します（高度コーデックを使用）"
     : "Sequential JPEGで保存します";
+  $("#savePngCodingStatus").textContent = advancedScan
+    ? "Adam7 Interlaced PNGで保存します（高度コーデックを使用）"
+    : "Non-interlaced PNGで保存します";
   $("#saveDialog").showModal();
 }
 
@@ -4583,6 +4607,7 @@ function setupSaveDialog() {
   const updateSaveOptions = () => {
     const type = typeSelect.value;
     $("#jpegOptions").hidden = type !== "image/jpeg";
+    $("#pngAdvancedOptions").hidden = type !== "image/png";
     $("#genericQualityRow").hidden = type !== "image/webp";
   };
 
