@@ -415,3 +415,59 @@ progress {
 .permission-granted { background: #eaf7ee; color: #176c36; border-color: #b8dfc3; }
 .permission-prompt { background: #fff6df; color: #765500; border-color: #e6d18d; }
 .permission-denied { background: #fff0ef; color: #a62b22; border-color: #efc2be; }
+
+
+/* v0.9 large-folder gallery tuning */
+.thumbnail-grid {
+  --thumb-card-width: 150px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-card-width), 1fr));
+}
+.thumbnail-grid[data-thumb-size="small"] { --thumb-card-width: 112px; }
+.thumbnail-grid[data-thumb-size="medium"] { --thumb-card-width: 150px; }
+.thumbnail-grid[data-thumb-size="large"] { --thumb-card-width: 220px; }
+
+.thumbnail-grid[data-thumb-size="small"] .thumbnail-item { height: 132px; }
+.thumbnail-grid[data-thumb-size="small"] .thumbnail-item img,
+.thumbnail-grid[data-thumb-size="small"] .thumbnail-folder-icon,
+.thumbnail-grid[data-thumb-size="small"] .thumbnail-loading { height: 88px; }
+
+.thumbnail-grid[data-thumb-size="large"] .thumbnail-item { height: 220px; }
+.thumbnail-grid[data-thumb-size="large"] .thumbnail-item img,
+.thumbnail-grid[data-thumb-size="large"] .thumbnail-folder-icon,
+.thumbnail-grid[data-thumb-size="large"] .thumbnail-loading { height: 168px; }
+
+.thumbnail-item {
+  content-visibility: auto;
+  contain-intrinsic-size: 150px 165px;
+}
+.thumbnail-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.gallery-load-more-sentinel {
+  grid-column: 1 / -1;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 11px;
+}
+#galleryBatchSelected:disabled { opacity: .55; }
+
+.slideshow-modal:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+}
+.slideshow-modal:fullscreen .slideshow-stage {
+  height: calc(100vh - 126px);
+}
+
+@media (max-width: 720px) {
+  .gallery-filter-row { align-items: stretch; }
+  .gallery-filter-row label { width: 100%; justify-content: space-between; }
+  .recent-folder-row { grid-template-columns: 1fr; }
+  .recent-folder-actions { flex-wrap: wrap; }
+}
