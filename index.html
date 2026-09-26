@@ -235,15 +235,21 @@
       </div>
     </main>
 
-    <footer class="status-bar">
-      <span id="statusFile">画像未読込</span>
-      <span id="statusSize">—</span>
-      <span id="statusPosition">x: —, y: —</span>
-      <span id="statusColor">RGB: — / HEX: —</span>
-      <span id="statusSelection">選択なし</span>
-      <span class="status-spacer"></span>
-      <span id="statusZoom">100%</span>
-      <span id="statusMessage">準備完了</span>
+    <footer class="status-bar" aria-label="画像情報">
+      <span id="statusFile" class="status-item status-file" title="画像未読込">画像未読込</span>
+      <span id="statusSize" class="status-item status-size">—</span>
+      <span id="statusPosition" class="status-item status-position">x: —, y: —</span>
+      <button id="statusColor" class="status-item status-color" type="button"
+              title="HEXカラーをクリップボードへコピー" aria-label="ピクセル色。HEXカラーをコピー">
+        <span id="statusColorSwatch" class="status-color-swatch" aria-hidden="true"></span>
+        <span id="statusHex" class="status-hex">#——</span>
+        <span id="statusRgb" class="status-rgb">RGB —</span>
+        <span id="statusAlpha" class="status-alpha" hidden></span>
+      </button>
+      <span id="statusSelection" class="status-item status-selection">選択なし</span>
+      <span class="status-spacer" aria-hidden="true"></span>
+      <span id="statusZoom" class="status-item status-zoom">100%</span>
+      <span id="statusMessage" class="status-item status-message" role="status" aria-live="polite">準備完了</span>
     </footer>
   </div>
 
