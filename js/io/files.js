@@ -1,4 +1,6 @@
+import { extractExifSegment, injectExif } from "./jpeg-exif.js";
 export async function decodeFileToCanvas(file, canvas) {
+  const exifSegment = await extractExifSegment(file);
   const bitmap = await createImageBitmap(file);
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
@@ -11,7 +13,8 @@ export async function decodeFileToCanvas(file, canvas) {
     sourceFormat: file.type || "image/unknown",
     width: canvas.width,
     height: canvas.height,
-    modified: false
+    modified: false,
+    exifSegment
   };
 }
 
@@ -26,7 +29,8 @@ export function createBlankCanvas(canvas, width, height, color = "#ffffff") {
     sourceFormat: "image/png",
     width,
     height,
-    modified: true
+    modified: true,
+    exifSegment: null
   };
 }
 
@@ -51,25 +55,36 @@ function extensionForType(type) {
   return type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
 }
 
-export async function encodeCanvas(canvas, type = "image/png", quality = .92) {
+export async function encodeCanvas(canvas, type = "image/png", quality = .92, {
+  exifSegment = null
+} = {}) {
   const source = type === "image/jpeg" ? compositeForJpeg(canvas) : canvas;
-  return await canvasToBlob(source, type, quality);
+  const blob = await canvasToBlob(source, type, quality);
+  return type === "image/jpeg" && exifSegment
+    ? await injectExif(blob, exifSegment, canvas.width, canvas.height)
+    : blob;
 }
 
 export async function encodeJpegToTargetSize(canvas, targetBytes, {
   minQuality = .01,
   maxQuality = 1,
-  iterations = 8
+  iterations = 8,
+  exifSegment = null
 } = {}) {
   const source = compositeForJpeg(canvas);
   targetBytes = Math.max(1, Math.round(Number(targetBytes) || 1));
 
-  const minimum = await canvasToBlob(source, "image/jpeg", minQuality);
+  const encodeCandidate = async quality => {
+    const blob = await encodeCandidate(quality);
+    return exifSegment ? await injectExif(blob, exifSegment, canvas.width, canvas.height) : blob;
+  };
+
+  const minimum = await encodeCandidate(minQuality);
   if (minimum.size > targetBytes) {
     return { blob: minimum, quality: minQuality, targetMet: false };
   }
 
-  const maximum = await canvasToBlob(source, "image/jpeg", maxQuality);
+  const maximum = await encodeCandidate(maxQuality);
   if (maximum.size <= targetBytes) {
     return { blob: maximum, quality: maxQuality, targetMet: true };
   }
@@ -105,8 +120,8 @@ export function downloadBlob(blob, baseName = "image", type = blob.type || "imag
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-export async function saveCanvas(canvas, type = "image/png", quality = .92, baseName = "image") {
-  const blob = await encodeCanvas(canvas, type, quality);
+export async function saveCanvas(canvas, type = "image/png", quality = .92, baseName = "image", options = {}) {
+  const blob = await encodeCanvas(canvas, type, quality, options);
   downloadBlob(blob, baseName, type);
   return blob;
 }
