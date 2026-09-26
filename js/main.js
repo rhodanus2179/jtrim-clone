@@ -4271,6 +4271,7 @@ async function executeLosslessJpegTransform(edgePolicyOverride = null) {
     refreshUI();
 
     let result;
+    let effectiveEdgePolicy = edgePolicy;
     try {
       result = await performLosslessJpegTransform({
         sourceFile,
@@ -4292,10 +4293,11 @@ async function executeLosslessJpegTransform(edgePolicyOverride = null) {
         }
         state.setBusy(true);
         refreshUI();
+        effectiveEdgePolicy = "trim";
         result = await performLosslessJpegTransform({
           sourceFile,
           userOperation,
-          edgePolicy: "trim",
+          edgePolicy: effectiveEdgePolicy,
           preserveProgressive
         });
       } else {
@@ -4313,7 +4315,7 @@ async function executeLosslessJpegTransform(edgePolicyOverride = null) {
       });
       setMessage(
         `${latest.name} をJPEGロスレス変換しました` +
-        (edgePolicy === "trim" ? "（端をトリミング）" : "")
+        (effectiveEdgePolicy === "trim" ? "（再圧縮なし・端をトリミング）" : "")
       );
     } else {
       const name = doc.fileName || sourceFile.name || "image.jpg";
