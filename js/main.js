@@ -4108,6 +4108,218 @@ function setupPrintPreviewDialog() {
   });
 }
 
+
+async function currentJpegSourceFile() {
+  const doc = state.document;
+  if (!doc || !hasCurrentJpegSource()) return null;
+  if (doc.fileHandle) return await getFileFromHandle(doc.fileHandle);
+  return doc.sourceFile || null;
+}
+
+function openJpegLosslessDialog() {
+  const doc = state.document;
+  if (!doc || !hasCurrentJpegSource()) {
+    alert("JPEGロスレス変換には、元JPEGファイルが必要です。");
+    return;
+  }
+
+  const info = doc.jpegInfo;
+  const orientation = readExifOrientation(doc.exifSegment);
+  const bits = [];
+  if (info?.width && info?.height) bits.push(`${info.width}×${info.height}px`);
+  if (info) bits.push(info.progressive ? "Progressive" : "Baseline/Sequential");
+  if (info?.sampling) bits.push(info.sampling);
+  if (orientation !== 1) bits.push(`Exif Orientation=${orientation}`);
+  $("#jpegLosslessSourceInfo").textContent = bits.length
+    ? `元JPEG: ${bits.join(" / ")}`
+    : "元JPEGの詳細情報を取得できません。";
+
+  $("#jpegLosslessDialog").showModal();
+}
+
+async function verifyDecodedJpeg(blob) {
+  const info = await parseJpegInfo(blob);
+  if (!info?.width || !info?.height) {
+    throw new Error("変換後JPEGの構造を確認できませんでした。");
+  }
+  if (info.width > 30000 || info.height > 30000 || info.width * info.height > 180_000_000) {
+    throw new Error("変換後JPEGの画像サイズが安全上限を超えています。");
+  }
+  const bitmap = await createImageBitmap(blob);
+  bitmap.close?.();
+  return info;
+}
+
+async function performLosslessJpegTransform({
+  sourceFile,
+  userOperation,
+  edgePolicy,
+  preserveProgressive
+}) {
+  const sourceExif = await extractExifSegment(sourceFile);
+  const sourceInfo = await parseJpegInfo(sourceFile);
+  if (!sourceInfo) throw new Error("元ファイルをJPEGとして解析できませんでした。");
+
+  const orientation = readExifOrientation(sourceExif);
+  const actualOperation = composeJpegTransform(userOperation, orientation);
+  const progressive = preserveProgressive
+    ? Boolean(sourceInfo.progressive)
+    : getCodecOptions().interlaceProgressive;
+
+  setMessage("JPEGロスレスコーデックを読み込んで変換しています…");
+  const transformed = await codecClient.jpegTransform(sourceFile, {
+    operation: actualOperation,
+    edgePolicy,
+    progressive,
+    copyMarkers: true
+  });
+
+  let outputBlob = transformed.blob;
+  let outputInfo = await parseJpegInfo(outputBlob);
+  if (!outputInfo) throw new Error("JPEGロスレス変換後のファイルを解析できませんでした。");
+
+  if (sourceExif) {
+    outputBlob = await injectExif(
+      outputBlob,
+      sourceExif,
+      outputInfo.width,
+      outputInfo.height
+    );
+  }
+
+  outputInfo = await verifyDecodedJpeg(outputBlob);
+  return { blob: outputBlob, info: outputInfo, actualOperation, orientation };
+}
+
+async function executeLosslessJpegTransform(edgePolicyOverride = null) {
+  const doc = state.document;
+  if (!doc || !hasCurrentJpegSource()) return;
+
+  if (doc.modified && !confirm(
+    "JPEGロスレス変換は元JPEGの圧縮データを直接処理します。\n" +
+    "現在の未保存の画像編集は破棄されます。続けますか？"
+  )) {
+    setMessage("JPEGロスレス変換をキャンセルしました");
+    return;
+  }
+
+  const userOperation =
+    document.querySelector('input[name="jpegLosslessOperation"]:checked')?.value || "rotate90";
+  const edgePolicy = edgePolicyOverride ||
+    document.querySelector('input[name="jpegLosslessEdge"]:checked')?.value || "perfect";
+  const preserveProgressive = $("#jpegLosslessPreserveProgressive").checked;
+
+  try {
+    let sourceFile;
+
+    if (doc.fileHandle) {
+      const granted = await ensureHandlePermission(doc.fileHandle, { write: true, request: true });
+      if (!granted) {
+        setMessage("JPEGロスレス変換の書き込み権限が許可されませんでした");
+        return;
+      }
+
+      sourceFile = await getFileFromHandle(doc.fileHandle);
+      const latestSnapshot = await createFileSnapshot(sourceFile);
+      if (doc.sourceSnapshot && fileSnapshotChanged(doc.sourceSnapshot, latestSnapshot)) {
+        if (!confirm(
+          "このJPEGはJTrim Webで開いた後に外部で変更されています。\n" +
+          "現在のファイルを基準にロスレス変換しますか？"
+        )) {
+          setMessage("JPEGロスレス変換をキャンセルしました");
+          return;
+        }
+      }
+    } else {
+      sourceFile = await currentJpegSourceFile();
+    }
+
+    if (!sourceFile || !(sourceFile.type === "image/jpeg" || /\.jpe?g$/i.test(sourceFile.name || ""))) {
+      throw new Error("元JPEGファイルを取得できませんでした。");
+    }
+
+    $("#jpegLosslessDialog").close();
+    state.setBusy(true);
+    refreshUI();
+
+    let result;
+    try {
+      result = await performLosslessJpegTransform({
+        sourceFile,
+        userOperation,
+        edgePolicy,
+        preserveProgressive
+      });
+    } catch (error) {
+      if (error instanceof CodecError && error.code === "JPEG_NOT_PERFECT" && edgePolicy === "perfect") {
+        state.setBusy(false);
+        refreshUI();
+        const trim = confirm(
+          "このJPEGは端の不完全なMCUブロックのため、画像全体を完全にはロスレス変換できません。\n\n" +
+          "再圧縮は行わず、変換できない端をトリミングして実行しますか？"
+        );
+        if (!trim) {
+          setMessage("JPEGロスレス変換をキャンセルしました");
+          return;
+        }
+        state.setBusy(true);
+        refreshUI();
+        result = await performLosslessJpegTransform({
+          sourceFile,
+          userOperation,
+          edgePolicy: "trim",
+          preserveProgressive
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    if (doc.fileHandle) {
+      await writeBlobToFileHandle(doc.fileHandle, result.blob);
+      const latest = await getFileFromHandle(doc.fileHandle);
+      await loadFile(latest, {
+        fileHandle: doc.fileHandle,
+        parentDirectoryHandle: doc.parentDirectoryHandle,
+        workspaceRelativePath: doc.workspaceRelativePath || latest.name
+      });
+      setMessage(
+        `${latest.name} をJPEGロスレス変換しました` +
+        (edgePolicy === "trim" ? "（端をトリミング）" : "")
+      );
+    } else {
+      const name = doc.fileName || sourceFile.name || "image.jpg";
+      const memoryFile = new File([result.blob], name, {
+        type: "image/jpeg",
+        lastModified: Date.now()
+      });
+      await loadFile(memoryFile);
+      state.markModified(true);
+      setMessage("JPEGをロスレス変換しました。元ファイルへは未保存です。Ctrl+Sで保存してください。");
+    }
+
+    history.clear();
+    state.clearSelection();
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof CodecError
+      ? `${error.message}${error.detail ? `\n\n${error.detail}` : ""}`
+      : (error.message || String(error));
+    alert(`JPEGロスレス変換に失敗しました。\n${message}`);
+    setMessage("JPEGロスレス変換に失敗しました");
+  } finally {
+    state.setBusy(false);
+    refreshUI();
+  }
+}
+
+function setupJpegLosslessDialog() {
+  $("#jpegLosslessOk").addEventListener("click", event => {
+    event.preventDefault();
+    void executeLosslessJpegTransform();
+  });
+}
+
 function addJpegInfoRow(container, label, value) {
   const dt = document.createElement("div");
   dt.className = "jpeg-info-label";
