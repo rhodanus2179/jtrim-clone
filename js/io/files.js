@@ -1,6 +1,7 @@
 import { extractExifSegment, injectExif } from "./jpeg-exif.js";
 export async function decodeFileToCanvas(file, canvas) {
-  const exifSegment = await extractExifSegment(file);
+  const isJpeg = file?.type === "image/jpeg" || /\.jpe?g$/i.test(file?.name || "");
+  const exifSegment = isJpeg ? await extractExifSegment(file) : null;
   const bitmap = await createImageBitmap(file);
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
