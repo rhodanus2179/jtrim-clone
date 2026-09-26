@@ -498,45 +498,116 @@ export function pencilImageData(source, selection = null) {
   return out;
 }
 
-export function floodFillImageData(source, x, y, color, tolerance = 20, opacity = 1) {
+export function floodFillImageData(
+  source,
+  x,
+  y,
+  color,
+  tolerancePercent = 8,
+  opacity = 1,
+  selection = null
+) {
   const out = cloneImageData(source);
-  const d = out.data;
-  const w = source.width, h = source.height;
-  x = Math.max(0, Math.min(w - 1, Math.round(Number(x) || 0)));
-  y = Math.max(0, Math.min(h - 1, Math.round(Number(y) || 0)));
-  tolerance = Math.max(0, Math.min(255, Number(tolerance) || 0));
+  const src = source.data;
+  const dst = out.data;
+  const w = source.width;
+  const h = source.height;
+  const bounds = regionBounds(source, selection);
+
+  x = Math.max(0, Math.min(w - 1, Math.floor(Number(x) || 0)));
+  y = Math.max(0, Math.min(h - 1, Math.floor(Number(y) || 0)));
+
+  if (x < bounds.x0 || x >= bounds.x1 || y < bounds.y0 || y >= bounds.y1) {
+    return out;
+  }
+
+  tolerancePercent = Math.max(0, Math.min(100, Number(tolerancePercent) || 0));
+  const tolerance = Math.round(tolerancePercent * 255 / 100);
   opacity = Math.max(0, Math.min(1, Number(opacity)));
+  if (opacity <= 0) return out;
+
   const targetIndex = (y * w + x) * 4;
-  const target = [d[targetIndex], d[targetIndex + 1], d[targetIndex + 2], d[targetIndex + 3]];
+  const targetR = src[targetIndex];
+  const targetG = src[targetIndex + 1];
+  const targetB = src[targetIndex + 2];
   const fill = parseHexColor(color);
   const seen = new Uint8Array(w * h);
   const stack = [x, y];
 
-  const closeEnough = idx =>
-    Math.abs(d[idx] - target[0]) <= tolerance &&
-    Math.abs(d[idx + 1] - target[1]) <= tolerance &&
-    Math.abs(d[idx + 2] - target[2]) <= tolerance &&
-    Math.abs(d[idx + 3] - target[3]) <= tolerance;
+  // JTrim-like seed based fill: every candidate is compared with the
+  // originally clicked pixel, not with the previously visited neighbour.
+  // Alpha is intentionally excluded from the tolerance test.
+  const closeEnough = (px, py) => {
+    if (px < bounds.x0 || px >= bounds.x1 || py < bounds.y0 || py >= bounds.y1) return false;
+    const i = (py * w + px) * 4;
+    return Math.max(
+      Math.abs(src[i] - targetR),
+      Math.abs(src[i + 1] - targetG),
+      Math.abs(src[i + 2] - targetB)
+    ) <= tolerance;
+  };
 
+  const paint = (px, py) => {
+    const i = (py * w + px) * 4;
+    const inv = 1 - opacity;
+    dst[i] = clamp255(src[i] * inv + fill[0] * opacity);
+    dst[i + 1] = clamp255(src[i + 1] * inv + fill[1] * opacity);
+    dst[i + 2] = clamp255(src[i + 2] * inv + fill[2] * opacity);
+    dst[i + 3] = clamp255(src[i + 3] * inv + 255 * opacity);
+  };
+
+  // Scanline flood fill avoids recursive call-stack growth and keeps the
+  // working stack small even for multi-megapixel connected regions.
   while (stack.length) {
-    const cy = stack.pop();
-    const cx = stack.pop();
-    const pos = cy * w + cx;
-    if (seen[pos]) continue;
-    seen[pos] = 1;
-    const i = pos * 4;
-    if (!closeEnough(i)) continue;
+    const sy = stack.pop();
+    const sx = stack.pop();
+    const startPos = sy * w + sx;
+    if (seen[startPos] || !closeEnough(sx, sy)) continue;
 
-    d[i] = clamp255(d[i] * (1 - opacity) + fill[0] * opacity);
-    d[i + 1] = clamp255(d[i + 1] * (1 - opacity) + fill[1] * opacity);
-    d[i + 2] = clamp255(d[i + 2] * (1 - opacity) + fill[2] * opacity);
-    d[i + 3] = clamp255(d[i + 3] * (1 - opacity) + 255 * opacity);
+    let left = sx;
+    while (
+      left >= bounds.x0 &&
+      !seen[sy * w + left] &&
+      closeEnough(left, sy)
+    ) {
+      left--;
+    }
+    left++;
 
-    if (cx > 0) stack.push(cx - 1, cy);
-    if (cx < w - 1) stack.push(cx + 1, cy);
-    if (cy > 0) stack.push(cx, cy - 1);
-    if (cy < h - 1) stack.push(cx, cy + 1);
+    let spanAbove = false;
+    let spanBelow = false;
+
+    for (let px = left; px < bounds.x1; px++) {
+      const pos = sy * w + px;
+      if (seen[pos] || !closeEnough(px, sy)) break;
+
+      seen[pos] = 1;
+      paint(px, sy);
+
+      if (sy > bounds.y0) {
+        const upPos = (sy - 1) * w + px;
+        const upMatches = !seen[upPos] && closeEnough(px, sy - 1);
+        if (upMatches && !spanAbove) {
+          stack.push(px, sy - 1);
+          spanAbove = true;
+        } else if (!upMatches) {
+          spanAbove = false;
+        }
+      }
+
+      if (sy + 1 < bounds.y1) {
+        const downPos = (sy + 1) * w + px;
+        const downMatches = !seen[downPos] && closeEnough(px, sy + 1);
+        if (downMatches && !spanBelow) {
+          stack.push(px, sy + 1);
+          spanBelow = true;
+        } else if (!downMatches) {
+          spanBelow = false;
+        }
+      }
+    }
   }
+
   return out;
 }
 
