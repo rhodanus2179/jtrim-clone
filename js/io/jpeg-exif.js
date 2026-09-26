@@ -86,6 +86,23 @@ function walkIfd(segment, ifdRelativeOffset, callback) {
   return true;
 }
 
+export function readExifOrientation(segment) {
+  if (!segment) return 1;
+  const info = tiffView(segment);
+  if (!info) return 1;
+  const { view, tiffStart, littleEndian } = info;
+  const ifd0Offset = view.getUint32(tiffStart + 4, littleEndian);
+  let orientation = 1;
+  walkIfd(segment, ifd0Offset, item => {
+    if (item.tag !== 0x0112 || item.type !== 3 || item.count !== 1) return;
+    const off = entryValueOffset(item.entry, item.type, item.count, view, littleEndian, tiffStart);
+    if (off == null) return;
+    const value = view.getUint16(off, littleEndian);
+    if (value >= 1 && value <= 8) orientation = value;
+  });
+  return orientation;
+}
+
 export function prepareExifSegment(segment, width, height) {
   if (!segment) return null;
   const copy = new Uint8Array(segment);
