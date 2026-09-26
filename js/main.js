@@ -897,6 +897,19 @@ function setupCommands() {
     });
 }
 
+function setupDialogViewport() {
+  const update = () => {
+    const viewport = window.visualViewport;
+    const height = viewport?.height || window.innerHeight || document.documentElement.clientHeight;
+    document.documentElement.style.setProperty("--dialog-viewport-height", `${Math.max(240, Math.floor(height))}px`);
+  };
+
+  update();
+  window.addEventListener("resize", update);
+  window.visualViewport?.addEventListener("resize", update);
+  window.visualViewport?.addEventListener("scroll", update);
+}
+
 function setupMenus() {
   const menus = [...document.querySelectorAll(".menu")];
 
@@ -4984,6 +4997,7 @@ function setupBeforeUnload() {
 
 setupCommands();
 commands.bind();
+setupDialogViewport();
 setupMenus();
 setupResizeDialog();
 setupAdjustDialog();
