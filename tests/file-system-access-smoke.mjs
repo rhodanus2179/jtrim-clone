@@ -7,6 +7,7 @@ import {
   queryHandlePermission
 } from "../js/io/file-system-access.js";
 import { WorkspaceController } from "../js/workspace/workspace-controller.js";
+import { recentHandleStoreAvailable } from "../js/io/handle-store.js";
 
 class FakeFileHandle {
   constructor(name, { size = 100, lastModified = 1, type = "image/jpeg" } = {}) {
@@ -37,6 +38,7 @@ assert.equal(isLikelyImageName("notes.txt"), false);
 
 const capabilities = getFileSystemCapabilities({});
 assert.equal(capabilities.directoryPicker, false);
+assert.equal(recentHandleStoreAvailable(), false);
 
 const sub = new FakeDirectoryHandle("sub", [
   new FakeFileHandle("z.png", { size: 20, lastModified: 300, type: "image/png" })
