@@ -2605,7 +2605,7 @@ function updateBatchOutputAvailability() {
 
 function openBatchDialog() {
   $("#batchUseWorkspace").hidden = !folderWorkspace.active;
-  if (folderWorkspace.active && !batchItems.length) {
+  if (folderWorkspace.active && (batchSourceMode === "workspace" || !batchItems.length)) {
     batchItems = batchItemsFromWorkspace();
     batchSourceMode = "workspace";
   }
@@ -3020,6 +3020,8 @@ function setupRecentFoldersDialog() {
 function releaseGalleryUrls() {
   thumbnailObserver?.disconnect();
   thumbnailObserver = null;
+  galleryLoadMoreObserver?.disconnect();
+  galleryLoadMoreObserver = null;
   for (const item of galleryItems) {
     if (item.url) URL.revokeObjectURL(item.url);
     item.url = null;
@@ -3112,6 +3114,8 @@ async function rebuildWorkspaceGallery({ render = true } = {}) {
     url: null
   }));
   selectedGalleryIndex = -1;
+  selectedGalleryIndices.clear();
+  lastSelectedGalleryIndex = -1;
   slideshowIndex = 0;
   renderWorkspaceChrome();
   if (render && $("#thumbnailDialog").open) await renderThumbnails();
@@ -3437,8 +3441,11 @@ async function renderThumbnails() {
   }
 
   const observer = createThumbnailObserver();
-  createGalleryLoadMoreObserver(observer);
+  const loadMore = createGalleryLoadMoreObserver(observer);
   appendGalleryChunk(observer);
+  if (!loadMore) {
+    while (renderedGalleryCount < galleryItems.length) appendGalleryChunk(observer);
+  }
 
   if (galleryItems.length && selectedGalleryIndex < 0) selectGalleryItem(0);
   else updateGallerySelectionUI();
