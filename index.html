@@ -14,7 +14,7 @@
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">◒</span>
           <strong>JTrim Web</strong>
-          <span class="version">v0.8.0</span>
+          <span class="version">v0.9.0</span>
         </div>
         <div class="privacy-note">画像はブラウザ内で処理されます</div>
       </div>
@@ -1021,6 +1021,11 @@
           </div>
         </fieldset>
         <fieldset>
+          <legend>対象範囲</legend>
+          <label class="check-row"><input id="batchRecursive" type="checkbox"> サブフォルダも含む</label>
+          <label class="check-row"><input id="batchPreserveStructure" type="checkbox" checked> 出力先でもフォルダ構造を保持</label>
+        </fieldset>
+        <fieldset>
           <legend><label class="check-row"><input id="batchResize" type="checkbox"> リサイズ</label></legend>
           <div class="inline-fields">
             <label>横 <input id="batchWidth" type="number" min="1" max="30000" value="1920"> px</label>
@@ -1041,6 +1046,35 @@
           <div class="inline-fields">
             <label>明るさ <input id="batchBrightness" type="number" min="-100" max="100" value="0"></label>
             <label>コントラスト <input id="batchContrast" type="number" min="-100" max="100" value="0"></label>
+          </div>
+          <div class="inline-fields">
+            <label>ヒストグラム補正
+              <select id="batchHistogramCorrection">
+                <option value="none">なし</option>
+                <option value="normalize">ノーマライズ</option>
+                <option value="equalize">イコライズ</option>
+              </select>
+            </label>
+            <label>ノイズ除去
+              <select id="batchDenoise">
+                <option value="0">なし</option>
+                <option value="1">レベル1</option>
+                <option value="2">レベル2</option>
+                <option value="3">レベル3</option>
+                <option value="4">レベル4</option>
+                <option value="5">レベル5</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend><label class="check-row"><input id="batchMargin" type="checkbox"> 余白を追加</label></legend>
+          <div class="inline-fields">
+            <label>上 <input id="batchMarginTop" type="number" min="0" max="10000" value="0"></label>
+            <label>右 <input id="batchMarginRight" type="number" min="0" max="10000" value="0"></label>
+            <label>下 <input id="batchMarginBottom" type="number" min="0" max="10000" value="0"></label>
+            <label>左 <input id="batchMarginLeft" type="number" min="0" max="10000" value="0"></label>
+            <label>色 <input id="batchMarginColor" type="color" value="#ffffff"></label>
           </div>
         </fieldset>
         <progress id="batchProgress" max="100" value="0" style="width:100%"></progress>
@@ -1081,7 +1115,16 @@
                 </select>
               </label>
               <button type="button" id="gallerySortDirection" data-direction="asc" title="昇順">↑</button>
+              <label>表示サイズ
+                <select id="galleryThumbSize">
+                  <option value="small">小</option>
+                  <option value="medium" selected>中</option>
+                  <option value="large">大</option>
+                </select>
+              </label>
               <label class="check-row"><input id="galleryImageOnly" type="checkbox" checked> 画像のみ</label>
+              <button type="button" id="galleryBatchSelected">選択項目を一括変換</button>
+              <span id="gallerySelectionCount" class="help-text">選択 0件</span>
               <span id="workspacePermissionStatus" class="help-text"></span>
             </div>
           </div>
@@ -1089,7 +1132,7 @@
         <div id="thumbnailGrid" class="thumbnail-grid" tabindex="0"></div>
       </div>
       <div class="dialog-actions">
-        <span class="help-text gallery-action-hint">フォルダはダブルクリックで移動、画像はダブルクリックまたはEnterで開きます。</span>
+        <span class="help-text gallery-action-hint">矢印キーで移動、Enterで開く。Ctrl/⌘クリックで複数選択、Shiftクリックで範囲選択できます。</span>
         <button class="primary" value="default">閉じる</button>
       </div>
     </form>
@@ -1104,10 +1147,14 @@
     <div class="slideshow-caption"><span id="slideshowName">—</span><span id="slideshowPosition">0 / 0</span></div>
     <div class="dialog-actions slideshow-controls">
       <button type="button" id="slideshowFiles">画像を選ぶ</button>
+      <button type="button" id="slideshowFolder">フォルダを開く</button>
       <button type="button" id="slideshowPrev">◀ 前</button>
       <button type="button" id="slideshowPlay">▶ 再生</button>
       <button type="button" id="slideshowNext">次 ▶</button>
       <label>間隔 <select id="slideshowInterval"><option value="2">2秒</option><option value="3" selected>3秒</option><option value="5">5秒</option><option value="10">10秒</option></select></label>
+      <label class="check-row"><input id="slideshowRandom" type="checkbox"> ランダム</label>
+      <label class="check-row"><input id="slideshowLoop" type="checkbox" checked> ループ</label>
+      <button type="button" id="slideshowFullscreen">全画面</button>
     </div>
   </dialog>
 
@@ -1142,7 +1189,7 @@
     <form method="dialog">
       <div class="dialog-head"><h2>JTrim Web</h2><button value="cancel" class="icon-button" aria-label="閉じる">×</button></div>
       <div class="dialog-body about">
-        <p><strong>JTrim Web v0.8.0</strong></p>
+        <p><strong>JTrim Web v0.9.0</strong></p>
         <p>WoodyBells の JTrim 1.53c の機能体系と操作思想を参考にした、非公式のブラウザ再実装です。</p>
         <p>原版のコードやバイナリを使用せず、HTML / CSS / JavaScript で独自実装しています。</p>
         <p><a href="https://www.woodybells.com/jtrim.html" target="_blank" rel="noreferrer">原版 JTrim</a></p>
