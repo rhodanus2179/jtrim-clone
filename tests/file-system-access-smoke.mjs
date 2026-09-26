@@ -4,7 +4,10 @@ import {
   isLikelyImageName,
   listDirectory,
   getFileFromHandle,
-  queryHandlePermission
+  queryHandlePermission,
+  walkDirectory,
+  createFileSnapshot,
+  fileSnapshotChanged
 } from "../js/io/file-system-access.js";
 import { WorkspaceController } from "../js/workspace/workspace-controller.js";
 import { recentHandleStoreAvailable } from "../js/io/handle-store.js";
@@ -17,6 +20,7 @@ class FakeFileHandle {
   }
   async getFile() { return this.file; }
   async queryPermission() { return "granted"; }
+  async isSameEntry(other) { return this === other; }
 }
 
 class FakeDirectoryHandle {
@@ -31,6 +35,7 @@ class FakeDirectoryHandle {
   async queryPermission({ mode } = {}) {
     return mode === "readwrite" ? "prompt" : "granted";
   }
+  async isSameEntry(other) { return this === other; }
 }
 
 assert.equal(isLikelyImageName("photo.JPG"), true);
@@ -54,6 +59,27 @@ const listed = await listDirectory(root);
 assert.equal(listed.length, 4);
 assert.equal(await queryHandlePermission(root), "granted");
 assert.equal((await getFileFromHandle(root.entries[0])).name, "b.jpg");
+
+const recursive = await walkDirectory(root, { recursive: true, imageOnly: true });
+assert.deepEqual(recursive.map(item => item.relativePath), ["b.jpg", "a.jpg", "sub/z.png"]);
+
+const recursiveWithoutSub = await walkDirectory(root, {
+  recursive: true,
+  imageOnly: true,
+  excludeHandles: [sub]
+});
+assert.deepEqual(recursiveWithoutSub.map(item => item.relativePath), ["b.jpg", "a.jpg"]);
+
+const sampleBlob = new Blob(["abcdef"]);
+Object.defineProperty(sampleBlob, "lastModified", { value: 1234 });
+const snapshotA = await createFileSnapshot(sampleBlob, { sampleBytes: 3 });
+const snapshotB = await createFileSnapshot(sampleBlob, { sampleBytes: 3 });
+assert.equal(fileSnapshotChanged(snapshotA, snapshotB), false);
+
+const changedBlob = new Blob(["abcdeg"]);
+Object.defineProperty(changedBlob, "lastModified", { value: 1234 });
+const snapshotC = await createFileSnapshot(changedBlob, { sampleBytes: 3 });
+assert.equal(fileSnapshotChanged(snapshotA, snapshotC), true);
 
 const workspace = new WorkspaceController();
 await workspace.openRoot(root);
