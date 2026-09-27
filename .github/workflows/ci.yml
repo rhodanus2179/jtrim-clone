@@ -29,6 +29,8 @@ jobs:
         run: node tests/jpeg-print-smoke.mjs
       - name: Run shortcut smoke tests
         run: node tests/shortcuts-smoke.mjs
+      - name: Run flood fill smoke tests
+        run: node tests/flood-fill-smoke.mjs
       - name: Run advanced JPEG codec smoke tests
         run: node tests/advanced-codec-smoke.mjs
       - name: Check required entry files
