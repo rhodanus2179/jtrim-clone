@@ -2,6 +2,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getCodecSecurityBlockers } from "./security-policy.mjs";
 
 const defaultManifest = new URL("../../docs/heic-release-manifest.json", import.meta.url);
 const goodSha = value => /^[0-9a-f]{40}$/.test(value || "");
@@ -9,7 +10,8 @@ const goodHash = value => /^[0-9a-f]{64}$/.test(value || "");
 const APPROVAL_ITEMS = [
   "versionMatchedSource", "fullCorrespondingSource", "LGPLandGPLTexts",
   "libraryReplacementTest", "HEVCPatentAssessment", "EdgeBrowserAcceptance",
-  "highResolutionUiAcceptance", "peakMemoryAcceptance", "applicationLicenseDecision"
+  "highResolutionUiAcceptance", "peakMemoryAcceptance", "applicationLicenseDecision",
+  "decoderSecurityAudit"
 ];
 
 export function evaluateHeicRelease(manifest, { vendorFile = null, sourceDirectory = null, applicationLicenseFile = null } = {}) {
@@ -24,8 +26,9 @@ export function evaluateHeicRelease(manifest, { vendorFile = null, sourceDirecto
     !sources.some(src => src.name === name && goodSha(src.sha) && /^[\w-]+\/[\w-]+$/.test(src.repo)))) {
     blockers.push("missing version-pinned corresponding source references");
   }
-  if (manifest?.build?.emscripten !== "3.1.61" || manifest?.build?.libde265 !== "1.0.15")
+  if (manifest?.build?.emscripten !== "3.1.61")
     blockers.push("unverified native build toolchain");
+  blockers.push(...getCodecSecurityBlockers(manifest));
   if (vendorFile) {
     if (!fs.existsSync(vendorFile)) blockers.push("decoder bundle is missing");
     else {

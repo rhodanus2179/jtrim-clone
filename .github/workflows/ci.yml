@@ -45,6 +45,10 @@ jobs:
         run: node tests/heic-memory-warning-smoke.mjs
       - name: Check proprietary and inherited license notices
         run: node tests/license-boundary-smoke.mjs
+      - name: Reject vulnerable HEIC codecs and unapproved deployment
+        run: |
+          node tests/heic-security-release-smoke.mjs
+          node tools/heic/block-unapproved-deployment.mjs
       - name: Run HEIC overwrite protection tests
         run: node tests/heic-save-guard-smoke.mjs
       - name: Run JPEG / print smoke tests

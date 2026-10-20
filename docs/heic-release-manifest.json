@@ -30,7 +30,8 @@
   ],
   "build": {
     "emscripten": "3.1.61",
-    "libde265": "1.0.15"
+    "libde265": "1.0.15",
+    "libheif": "1.23.5"
   },
   "distribution": {
     "approved": false,
@@ -46,8 +47,16 @@
       "EdgeBrowserAcceptance": "pending",
       "highResolutionUiAcceptance": "pending",
       "peakMemoryAcceptance": "pending",
-      "applicationLicenseDecision": "documented"
+      "applicationLicenseDecision": "documented",
+      "decoderSecurityAudit": "pending"
     },
     "applicationLicense": "proprietary"
+  },
+  "securityReview": {
+    "asOf": "2026-10-20",
+    "minimumLibheif": "1.23.6",
+    "minimumLibde265": "1.1.3",
+    "record": "docs/heic-wasm-risk-assessment-20261020.md",
+    "result": "HOLD"
   }
 }
