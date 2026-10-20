@@ -30,6 +30,8 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/heic-lib" --no-save --ignore-scripts --no-package-lock "libheif-js@1.23.5"
           SRC="$RUNNER_TEMP/heic-lib/node_modules/libheif-js"
           test -s "$SRC/libheif-wasm/libheif-bundle.mjs"
+          EXPECTED="$(node -p "require('./tools/wasm/versions.json').libheifJs.bundleSha256")"
+          printf '%s  %s\n' "$EXPECTED" "$SRC/libheif-wasm/libheif-bundle.mjs" | sha256sum -c -
           mkdir -p third_party/libheif-js
           cp "$SRC/libheif-wasm/libheif-bundle.mjs" third_party/libheif-js/libheif-bundle.mjs
           cp "$SRC/LICENSE" third_party/libheif-js/LICENSE
