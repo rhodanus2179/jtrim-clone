@@ -35,11 +35,22 @@ jobs:
           cd "$RUNNER_TEMP/emsdk"
           ./emsdk install 3.1.61
           ./emsdk activate 3.1.61
+      - name: Pin TypeScript 5 compiler for Emscripten 3.1.61
+        shell: bash
+        run: |
+          set -euo pipefail
+          # TS6 removed --outFile, still required by emcc 3.1.61 --emit-tsd.
+          npm install --global --no-audit --no-fund typescript@5.4.5
+          tsc --version
+          test "$(tsc --version)" = "Version 5.4.5"
       - name: Recompile changed libheif and re-bundle ESM
         shell: bash
         run: |
           set -euo pipefail
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          # Confirm compiler resolution after activating emsdk, not just before.
+          tsc --version
+          test "$(tsc --version)" = "Version 5.4.5"
           bash tools/heic/rebuild-modified.sh "$RUNNER_TEMP/heic-p6"
       - name: Public test HEIC only — no private photos
         shell: bash
