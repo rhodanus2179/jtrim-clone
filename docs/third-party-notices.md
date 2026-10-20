@@ -32,3 +32,17 @@ The browser PNG codec also uses the zlib source bundled with libspng in the same
 - License text: `third_party/zlib/LICENSE`
 
 Both PNG dependencies are copied by `.github/workflows/rebuild-codecs.yml` from the same verified libjpeg-turbo source archive used for the JPEG codec build.
+
+
+## HEIC/HEIF decoder (planned, NOT YET DISTRIBUTED)
+
+The HEIC input code optionally loads `libheif-js 1.23.5` (LGPL-3.0) using a locally deployed ES module. **This repository does not yet include that binary in the default branch or current draft changes.** The test workflow downloads an unmodified copy for testing only and deletes it after the isolated job.
+
+- Upstream package: https://github.com/catdad-experiments/libheif-js
+- Emscripten build source: https://github.com/catdad-experiments/libheif-emscripten
+- Underlying source projects: https://github.com/strukturag/libheif and https://github.com/strukturag/libde265
+- Binary evaluated: `libheif-wasm/libheif-bundle.mjs`, SHA-256 `095194187be00d3e36335b8ad7f5552d70655e5e2159486d7d36cd4daa47bba9`
+- Local evaluation vendor script: `tools/vendor-libheif-js.sh`
+- Distribution approval checklist: `docs/heic-heif-distribution-gate.md`
+
+A notice and upstream links alone do **not** establish compliance with LGPL-3.0. Do not publicly deploy the WASM module until the corresponding source, license documents, replacement/relinking method and HEVC patent review are completed.

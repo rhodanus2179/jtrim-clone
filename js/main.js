@@ -7,6 +7,7 @@ import {
   encodeJpegToTargetSize, downloadBlob
 } from "./io/files.js";
 import { isHeicCandidate, isSupportedInputImage } from "./io/image-format.js";
+import { writableImageType } from "./io/save-format.js";
 import {
   cropCanvas, coordinateCrop, circularCrop, roundedCrop,
   rotate90, rotateArbitrary, flipCanvas, shiftCanvas, addMargin, addShadow, applyTexture,
@@ -3639,16 +3640,20 @@ function sequenceHeicPreview(task) {
 
 async function previewHeic(file, maxDimension) {
   const decoded = document.createElement("canvas");
-  await decodeFileToCanvas(file, decoded);
-  const scale = Math.min(1, maxDimension / Math.max(decoded.width, decoded.height));
-  const thumb = document.createElement("canvas");
-  thumb.width = Math.max(1, Math.round(decoded.width * scale));
-  thumb.height = Math.max(1, Math.round(decoded.height * scale));
-  thumb.getContext("2d").drawImage(decoded, 0, 0, thumb.width, thumb.height);
-  decoded.width = decoded.height = 0; // release backing store
-  return await new Promise((resolve, reject) => thumb.toBlob(
-    blob => blob ? resolve(blob) : reject(new Error("HEICプレビュー生成に失敗しました。")),
-    "image/webp", .85));
+  try {
+    await decodeFileToCanvas(file, decoded);
+    const scale = Math.min(1, maxDimension / Math.max(decoded.width, decoded.height));
+    const thumb = document.createElement("canvas");
+    thumb.width = Math.max(1, Math.round(decoded.width * scale));
+    thumb.height = Math.max(1, Math.round(decoded.height * scale));
+    thumb.getContext("2d").drawImage(decoded, 0, 0, thumb.width, thumb.height);
+    return await new Promise((resolve, reject) => thumb.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error("HEICプレビュー生成に失敗しました。")),
+      "image/webp", .85));
+  } finally {
+    // Release the full-size Canvas on both success and failure.
+    decoded.width = decoded.height = 0;
+  }
 }
 
 async function ensureGalleryUrl(item, thumbnail = false) {
@@ -3663,6 +3668,7 @@ async function ensureGalleryUrl(item, thumbnail = false) {
     return item.url;
   }
   return await sequenceHeicPreview(async () => {
+    if (!galleryItems.includes(item)) return null; // navigation while queued
     if (item[key]) return item[key];
     const blob = await previewHeic(file, thumbnail ? 480 : 2048);
     if (!galleryItems.includes(item)) return null;
@@ -4707,15 +4713,6 @@ function openJpegInfoDialog() {
   }
 
   $("#jpegInfoDialog").showModal();
-}
-
-function writableImageType(type, fileName = "") {
-  if (["image/jpeg", "image/png", "image/webp"].includes(type)) return type;
-  const lower = String(fileName || "").toLowerCase();
-  if (/\.jpe?g$/.test(lower)) return "image/jpeg";
-  if (/\.png$/.test(lower)) return "image/png";
-  if (/\.webp$/.test(lower)) return "image/webp";
-  return null;
 }
 
 function nameWithTypeExtension(name, type) {

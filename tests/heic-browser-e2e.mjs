@@ -71,6 +71,66 @@ try {
   const status = await page.locator("#statusMessage").textContent();
   assert.match(status, /開きました/, "UI open failed: " + status);
   console.log("File picker to edit canvas PASS:", status);
+
+  // Two public HEIC copies with distinct names exercise lazy previews, slideshow
+  // and ZIP batch output. Never use private iPhone photos in GitHub Actions.
+  const fixtureBytes = await fs.readFile(process.env.HEIC_TEST_FILE);
+  const galleryFiles = [
+    { name: "first.HEIC", mimeType: "image/heic", buffer: fixtureBytes },
+    { name: "second.heic", mimeType: "image/heic", buffer: fixtureBytes }
+  ];
+  await page.locator("#galleryFileInput").setInputFiles(galleryFiles);
+  await page.waitForSelector("#thumbnailDialog[open]");
+  await page.waitForFunction(() => {
+    const imgs = [...document.querySelectorAll("#thumbnailGrid .thumbnail-item img")];
+    return imgs.length >= 2 && imgs.every(img => img.complete && img.naturalWidth > 0);
+  }, null, { timeout: 120000 });
+  const thumbnails = await page.locator("#thumbnailGrid .thumbnail-item img").evaluateAll(
+    imgs => imgs.map(img => [img.naturalWidth, img.naturalHeight]));
+  assert.equal(thumbnails.length, 2);
+  console.log("HEIC gallery thumbnail PASS:", JSON.stringify(thumbnails));
+
+  // Open slideshow from existing gallery state after closing the thumbnails modal.
+  await page.evaluate(() => {
+    document.querySelector("#thumbnailDialog").close();
+    document.querySelector('[data-command="file.slideshow"]').click();
+  });
+  await page.waitForSelector("#slideshowDialog[open]");
+  await page.waitForFunction(() => {
+    const img = document.querySelector("#slideshowImage");
+    return img && !img.hidden && img.complete && img.naturalWidth > 0;
+  }, null, { timeout: 120000 });
+  const firstName = await page.locator("#slideshowName").textContent();
+  await page.locator("#slideshowNext").click();
+  await page.waitForFunction(before => {
+    const img = document.querySelector("#slideshowImage");
+    return document.querySelector("#slideshowName")?.textContent !== before &&
+      img && !img.hidden && img.complete && img.naturalWidth > 0;
+  }, firstName, { timeout: 120000 });
+  console.log("HEIC slideshow PASS:", firstName, "→", await page.locator("#slideshowName").textContent());
+  await page.locator("#slideshowClose").click();
+
+  // Batch conversion produces a ZIP with correctly named JPEGs.
+  await page.evaluate(() => document.querySelector('[data-command="file.batch"]').click());
+  await page.waitForSelector("#batchDialog[open]");
+  await page.locator("#batchFileInput").setInputFiles(galleryFiles);
+  await page.locator("#batchType").selectOption("image/jpeg");
+  const downloaded = page.waitForEvent("download", { timeout: 120000 });
+  await page.locator("#batchStart").click();
+  const download = await downloaded;
+  const archive = await fs.readFile(await download.path());
+  assert.deepEqual([...archive.subarray(0, 4)], [80, 75, 3, 4]);
+  for (const name of ["first.jpg", "second.jpg"]) {
+    assert.ok(archive.includes(Buffer.from(name, "utf8")), "ZIP missing " + name);
+  }
+  assert.match(await page.locator("#batchStatus").textContent(), /2ファイルの変換が完了/);
+  console.log("HEIC batch conversion JPEG ZIP PASS:", archive.byteLength);
+
+  // Ctrl+S on HEIC must open Save As, never silently write to the source.
+  await page.evaluate(() => document.querySelector('[data-command="file.overwrite"]').click());
+  await page.waitForSelector("#saveDialog[open]");
+  console.log("HEIC Save As routing PASS");
+
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));
