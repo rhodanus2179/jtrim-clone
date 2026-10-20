@@ -7,6 +7,7 @@ import {
   encodeJpegToTargetSize, downloadBlob
 } from "./io/files.js";
 import { isHeicCandidate, isSupportedInputImage } from "./io/image-format.js";
+import { shouldWarnHeicMemory, heicMemoryWarningMessage } from "./io/heic-memory-policy.js";
 import { writableImageType } from "./io/save-format.js";
 import {
   cropCanvas, coordinateCrop, circularCrop, roundedCrop,
@@ -376,6 +377,10 @@ async function commitPreview(label) {
 async function loadFile(file, sourceContext = null) {
   if (!isSupportedInputImage(file)) {
     setMessage("画像ファイルを選択してください");
+    return;
+  }
+  if (shouldWarnHeicMemory(file) && !confirm(heicMemoryWarningMessage())) {
+    setMessage("HEICの読み込みをキャンセルしました");
     return;
   }
   try {
