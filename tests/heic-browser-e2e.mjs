@@ -31,6 +31,14 @@ try {
   const page = await browser.newPage();
   page.on("pageerror", error => console.error("Page error:", error.message));
   await page.goto(base, { waitUntil: "load" });
+  const info = await page.evaluate(async () => {
+    const vendor = await import("./third_party/libheif-js/libheif-bundle.mjs");
+    return { exports: Object.keys(vendor), kind: typeof vendor.default,
+      keys: typeof vendor.default === "object" ? Object.keys(vendor.default || {}).slice(0, 16) : [],
+      hasDecoder: typeof vendor.default?.HeifDecoder,
+      thenable: typeof vendor.default?.then };
+  });
+  console.log("WASM module shape:", JSON.stringify(info));
   const bytes = [...new Uint8Array(await fs.readFile(process.env.HEIC_TEST_FILE))];
   const result = await page.evaluate(async array => {
     const file = new File([new Uint8Array(array)], "upstream-example.heic", { type: "image/heic" });

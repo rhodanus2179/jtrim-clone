@@ -27,6 +27,8 @@ jobs:
         run: node tests/file-system-access-smoke.mjs
       - name: Run HEIC format smoke tests
         run: node tests/heic-format-smoke.mjs
+      - name: Run HEIF module resolver unit tests
+        run: node tests/heic-module-resolver-smoke.mjs
       - name: Run HEIF decoder contract smoke tests
         run: node tests/heif-decoder-contract-smoke.mjs
       - name: Check HEIF Worker module import
