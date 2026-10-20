@@ -43,6 +43,7 @@ export function evaluateHeicRelease(manifest, { vendorFile = null, sourceDirecto
   if (!applicationLicenseFile || !fs.statSync(applicationLicenseFile, { throwIfNoEntry: false })?.isFile() || !fs.readFileSync(applicationLicenseFile, 'utf8').trim())
     blockers.push('application license is not documented');
   const distribution = manifest?.distribution || {};
+  if (distribution.applicationLicense !== "proprietary") blockers.push("application license policy mismatch");
   for (const item of APPROVAL_ITEMS) {
     if (distribution.evidence?.[item] !== "approved")
       blockers.push("review pending: "+item);

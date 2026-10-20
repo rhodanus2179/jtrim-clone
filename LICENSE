@@ -1,0 +1,38 @@
+JTrim Clone / JTrim Web — Proprietary Application License Notice
+Copyright (c) 2026 the respective copyright holders. All rights reserved.
+
+1. Scope. This notice applies to original application code and other original
+project-owned content, but NOT to separately licensed third-party materials.
+It is not a claim of ownership of other contributors' work.
+
+2. Access. Users may access and use the publicly hosted browser application
+through its normal interface. This does not grant a general copyright license
+to reproduce, modify, sublicense, or redistribute the proprietary application
+source code. Other permissions require authorization from the relevant
+rights holder, unless permitted by law or applicable hosting-platform terms.
+
+3. Third-party exceptions. The application includes or may later distribute
+components with their own licenses. The rights and permissions for those
+components are determined solely by those separate terms (including, where
+applicable, IJG, BSD, zlib, LGPL-3.0 and GPLv3); this proprietary notice
+does not override or restrict them. In particular it does not prohibit the
+modification of LGPL-covered portions or reverse engineering for debugging
+such modifications to the extent permitted by the applicable LGPL terms.
+When an LGPL-3.0 Combined Work is distributed together with this application,
+recipients may use the Corresponding Application Code as necessary to recombine
+or relink it with an interface-compatible modified LGPL library and run and
+debug that modified Combined Work. This permission is intended to preserve the
+rights required by LGPL-3.0 section 4(d)(0), to the extent that provision
+applies, without making the proprietary application generally open source.
+It does not replace any other permission that the LGPL requires.
+See docs/third-party-notices.md and license files in third_party/.
+
+4. Other intellectual property. JTrim Clone / JTrim Web is an unofficial
+implementation inspired by JTrim; no rights in the original JTrim name,
+trademarks, artwork or third-party code are granted here. Copyright in
+images supplied by users belongs to their respective rights holders.
+
+5. Further terms. Any additional custom commercial terms, warranty provisions,
+contractual user restrictions, or special redistribution grants must be
+separately set by the relevant rights holder. This notice itself does not
+certify ownership of every contribution or third-party license compliance.

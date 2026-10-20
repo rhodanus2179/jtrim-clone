@@ -46,7 +46,8 @@
       "EdgeBrowserAcceptance": "pending",
       "highResolutionUiAcceptance": "pending",
       "peakMemoryAcceptance": "pending",
-      "applicationLicenseDecision": "pending"
-    }
+      "applicationLicenseDecision": "documented"
+    },
+    "applicationLicense": "proprietary"
   }
 }

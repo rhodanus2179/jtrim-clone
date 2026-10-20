@@ -1,5 +1,11 @@
 # Third-party notices
 
+This document records separately licensed third-party components. The original
+application is proprietary under [../LICENSE](../LICENSE). The app license
+does not replace or restrict upstream license rights; see
+[license scope](proprietary-and-third-party-license-policy.md).
+
+
 ## libjpeg-turbo
 
 The advanced JPEG codec uses **libjpeg-turbo 3.2.0**, compiled to WebAssembly for browser execution.
@@ -47,4 +53,4 @@ The HEIC input code optionally loads `libheif-js 1.23.5` (LGPL-3.0) using a loca
 
 A notice and upstream links alone do **not** establish compliance with LGPL-3.0. Do not publicly deploy the WASM module until the corresponding source, license documents, replacement/relinking method and HEVC patent review are completed.
 
-開発者向けの対応ソースと審査用パッケージ生成手順は [P7ガイド](heic-p7-developer-source-guide.md) を参照してください。これは技術的な審査候補であり、LGPLの遵守やWASMの公開を承認したものではありません。また、JTrim本体のルート`LICENSE`は未設定です。
+開発者向けの対応ソースと審査用パッケージ生成手順は [P7ガイド](heic-p7-developer-source-guide.md) を参照してください。これは技術的な審査候補であり、LGPLの遵守やWASMの公開を承認したものではありません。本体の独自ライセンスはルート `LICENSE` に記載していますが、第三者コードの原ライセンスを変更するものではありません。

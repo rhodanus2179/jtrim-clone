@@ -279,3 +279,7 @@ https://www.woodybells.com/about.html
 HEIC入力は作業ブランチのドラフトPRで検証中です。現行の`main`にはHEIC用WASMを正式同梱していません。承認後は一般利用者が通常の画像と同様に開ける設計で、利用者にライブラリの差し替えを求めません。
 
 開発者向けのソース・ライセンス資料：[P7 配布準備](docs/heic-p7-developer-source-guide.md)。正式公開は引き続き保留しています。
+
+## License / 利用許諾
+
+JTrim Clone／JTrim Webの独自実装部分は**独自ライセンス（権利留保）**です。[LICENSE](LICENSE)を参照してください。第三者ライブラリは原ライセンスが優先し、本体の権利留保は及びません。詳細は[権利範囲](docs/proprietary-and-third-party-license-policy.md)および[第三者ライセンス](docs/third-party-notices.md)をご覧ください。HEIC用WASMはまだ正式配布していません。
