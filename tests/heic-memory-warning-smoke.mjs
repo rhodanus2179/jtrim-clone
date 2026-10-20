@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import { shouldWarnHeicMemory, heicMemoryWarningMessage, HEIC_COMPRESSED_WARNING_BYTES } from "../js/io/heic-memory-policy.js";
+assert.equal(HEIC_COMPRESSED_WARNING_BYTES, 2097152);
+assert.equal(shouldWarnHeicMemory({ name: "IMG.HEIC", type: "", size: 2889173 }), true);
+assert.equal(shouldWarnHeicMemory({ name: "IMG.HEIC", type: "", size: 2376162 }), true);
+assert.equal(shouldWarnHeicMemory({ name: "IMG.HEIC", type: "image/jpeg", size: 2097152 }), true);
+assert.equal(shouldWarnHeicMemory({ name: "IMG.HEIF", type: "", size: 2097151 }), false);
+assert.equal(shouldWarnHeicMemory({ name: "IMG.JPG", type: "image/jpeg", size: 100000000 }), false);
+assert.equal(shouldWarnHeicMemory({ name: "IMG.HEIC", type: "", size: undefined }), false);
+assert.match(heicMemoryWarningMessage(), /メモリ/);
+console.log("HEIC memory warning unit tests passed");

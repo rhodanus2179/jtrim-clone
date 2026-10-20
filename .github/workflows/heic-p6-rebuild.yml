@@ -1,0 +1,77 @@
+name: HEIC P6 Rebuild Modified LGPL Library
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/heic-p6-rebuild.yml"
+      - "tools/heic/rebuild-modified.sh"
+      - "tests/heic-rebuilt-wasm-e2e.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  modified-wasm:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Fetch pinned sources and LGPL notices into temporary storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/heic/stage-review.sh "$RUNNER_TEMP/heic-p6"
+      - name: Install Emscripten 3.1.61 and native build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq autoconf automake libtool pkg-config cmake
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          cd "$RUNNER_TEMP/emsdk"
+          ./emsdk install 3.1.61
+          ./emsdk activate 3.1.61
+      - name: Pin TypeScript 5 compiler for Emscripten 3.1.61
+        shell: bash
+        run: |
+          set -euo pipefail
+          # TS6 removed --outFile, still required by emcc 3.1.61 --emit-tsd.
+          npm install --global --no-audit --no-fund typescript@5.4.5
+          tsc --version
+          test "$(tsc --version)" = "Version 5.4.5"
+      - name: Recompile changed libheif and re-bundle ESM
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          # Confirm compiler resolution after activating emsdk, not just before.
+          tsc --version
+          test "$(tsc --version)" = "Version 5.4.5"
+          bash tools/heic/rebuild-modified.sh "$RUNNER_TEMP/heic-p6"
+      - name: Public test HEIC only — no private photos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/heic-fixture"
+          curl --retry 3 --fail --location --silent --show-error \
+            "https://raw.githubusercontent.com/strukturag/libheif/364905fc9841bdda229e0ae2c5fda13b5fc98d1a/examples/example.heic" \
+            -o "$RUNNER_TEMP/heic-fixture/example.heic"
+          test "$(stat -c%s "$RUNNER_TEMP/heic-fixture/example.heic")" = 718114
+          echo "HEIC_TEST_FILE=$RUNNER_TEMP/heic-fixture/example.heic" >> "$GITHUB_ENV"
+      - name: Install Playwright Chromium browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/heic-playwright" --no-save --ignore-scripts --no-package-lock "playwright@1.56.1"
+          "$RUNNER_TEMP/heic-playwright/node_modules/.bin/playwright" install --with-deps chromium
+          echo "PLAYWRIGHT_MODULE=$RUNNER_TEMP/heic-playwright/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+      - name: Verify modified LGPL libheif marker & real HEIC decode
+        run: node tests/heic-rebuilt-wasm-e2e.mjs
+      - name: Full JTrim Chromium UI against rebuilt WASM
+        run: node tests/heic-browser-e2e.mjs
+      - name: Release gate must remain HOLD, no artifact upload
+        run: node tools/heic/release-gate.mjs --review-status
