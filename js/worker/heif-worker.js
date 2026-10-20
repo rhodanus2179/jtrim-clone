@@ -1,4 +1,5 @@
 import { decodeHeifWithApi, HeifDecodeError } from "../codecs/heif-decode-core.js";
+import { resolveHeifModule } from "../codecs/resolve-heif-module.js";
 
 let libheifPromise = null;
 async function getHeifApi() {
@@ -6,7 +7,7 @@ async function getHeifApi() {
     // File is intentionally absent until its distribution obligations are reviewed.
     // No runtime CDN dependency or HEIC payload upload.
     libheifPromise = import("../../third_party/libheif-js/libheif-bundle.mjs")
-      .then(mod => mod.default)
+      .then(resolveHeifModule)
       .catch(error => {
         libheifPromise = null;
         throw new HeifDecodeError("HEIF_CODEC_UNAVAILABLE",

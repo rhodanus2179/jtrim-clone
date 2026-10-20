@@ -4,5 +4,14 @@
     "sourceUrl": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz",
     "sha256": "6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e"
   },
-  "emscripten": "4.0.15"
+  "emscripten": "4.0.15",
+  "libheifJs": {
+    "version": "1.23.5",
+    "bundlePath": "libheif-wasm/libheif-bundle.mjs",
+    "bundleSha256": "095194187be00d3e36335b8ad7f5552d70655e5e2159486d7d36cd4daa47bba9",
+    "upstream": "https://github.com/catdad-experiments/libheif-js/tree/v1.23.5",
+    "emscriptenSource": "https://github.com/catdad-experiments/libheif-emscripten/releases/tag/v1.23.5",
+    "license": "LGPL-3.0",
+    "deploymentReviewed": false
+  }
 }

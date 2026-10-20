@@ -1,0 +1,82 @@
+name: HEIC WASM Browser Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/heic-wasm-validation.yml"
+      - "tests/heic-browser-e2e.mjs"
+      - "js/io/files.js"
+      - "js/codecs/heif-*.js"
+      - "js/worker/heif-worker.js"
+      - "tools/vendor-libheif-js.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned HEIF decoder for testing (not committed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/heic-lib" --no-save --ignore-scripts --no-package-lock "libheif-js@1.23.5"
+          SRC="$RUNNER_TEMP/heic-lib/node_modules/libheif-js"
+          test -s "$SRC/libheif-wasm/libheif-bundle.mjs"
+          EXPECTED="$(node -p "require('./tools/wasm/versions.json').libheifJs.bundleSha256")"
+          printf '%s  %s\n' "$EXPECTED" "$SRC/libheif-wasm/libheif-bundle.mjs" | sha256sum -c -
+          mkdir -p third_party/libheif-js
+          cp "$SRC/libheif-wasm/libheif-bundle.mjs" third_party/libheif-js/libheif-bundle.mjs
+          cp "$SRC/LICENSE" third_party/libheif-js/LICENSE
+          sha256sum third_party/libheif-js/libheif-bundle.mjs | tee "$RUNNER_TEMP/heic-bundle.sha256"
+          node -e 'const f=require(process.env.RUNNER_TEMP+"/heic-lib/node_modules/libheif-js/package.json");if(f.version!=="1.23.5"||f.license!=="LGPL-3.0")process.exit(1)'
+      - name: Download a public upstream HEIC fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/heic-fixtures"
+          curl --retry 3 --fail --location --silent --show-error \
+            "https://raw.githubusercontent.com/strukturag/libheif/364905fc9841bdda229e0ae2c5fda13b5fc98d1a/examples/example.heic" \
+            -o "$RUNNER_TEMP/heic-fixtures/example.heic"
+          test "$(stat -c%s "$RUNNER_TEMP/heic-fixtures/example.heic")" = 718114
+          echo "HEIC_TEST_FILE=$RUNNER_TEMP/heic-fixtures/example.heic" >> "$GITHUB_ENV"
+      - name: Install Playwright and Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/heic-playwright" --no-save --ignore-scripts --no-package-lock "playwright@1.56.1"
+          "$RUNNER_TEMP/heic-playwright/node_modules/.bin/playwright" install --with-deps chromium
+          echo "PLAYWRIGHT_MODULE=$RUNNER_TEMP/heic-playwright/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+      - name: Test real HEIC decode, export and UI in Chromium
+        run: node tests/heic-browser-e2e.mjs
+      - name: Test existing HEIC contract and input tests
+        run: |
+          node tests/heic-format-smoke.mjs
+          node tests/heif-decoder-contract-smoke.mjs
+          node tests/heic-input-integration-smoke.mjs
+      - name: Attach transient LGPL attribution to evaluation bundle
+        shell: bash
+        run: |
+          cat > third_party/libheif-js/UPSTREAM.md <<'EOF'
+          Evaluation copy: unmodified libheif-js 1.23.5 Emscripten WASM bundle.
+          License: LGPL-3.0 (see LICENSE).
+          Matching wrapper source: https://github.com/catdad-experiments/libheif-js/tree/v1.23.5
+          libheif source: https://github.com/strukturag/libheif
+          HEVC decoder libde265 source: https://github.com/strukturag/libde265
+          Not approved for production deployment. This archive is a one-day testing artifact.
+          EOF
+          sha256sum third_party/libheif-js/libheif-bundle.mjs > third_party/libheif-js/SHA256SUMS
+      - name: Attach temporary WASM evaluation bundle (one-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: heic-p2-eval-vendor
+          path: third_party/libheif-js/
+          retention-days: 1
+          if-no-files-found: error
