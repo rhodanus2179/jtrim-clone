@@ -35,6 +35,10 @@ jobs:
         run: node --input-type=module -e "globalThis.self={addEventListener(){},postMessage(){}}; await import('./js/worker/heif-worker.js')"
       - name: Run HEIC input integration smoke tests
         run: node tests/heic-input-integration-smoke.mjs
+      - name: Validate HEIC release gate
+        run: |
+          node tests/heic-release-gate-smoke.mjs
+          node tools/heic/release-gate.mjs --review-status
       - name: Run HEIC overwrite protection tests
         run: node tests/heic-save-guard-smoke.mjs
       - name: Run JPEG / print smoke tests
