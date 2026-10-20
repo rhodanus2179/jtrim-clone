@@ -7,6 +7,8 @@ on:
       - "tools/heic/build-updated-wasm.sh"
       - "docs/heic-security-build-candidate.json"
       - "tests/heic-updated-wasm-e2e.mjs"
+      - "tests/heic-highres-synthetic-e2e.mjs"
+      - "tools/heic/generate-heic-highres-fixture.py"
   workflow_dispatch:
 
 permissions:
@@ -41,6 +43,8 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           test "$(tsc --version)" = "Version 5.4.5"
           bash tools/heic/build-updated-wasm.sh "$RUNNER_TEMP/heic-secure-candidate"
+          EXPECTED="$(node -p "require('./docs/heic-security-build-candidate.json').wasmSha256")"
+                    printf '%s  %s\n' "$EXPECTED" "third_party/libheif-js/libheif-bundle.mjs" | sha256sum --check
       - name: Download public HEIC fixture, never private photos
         shell: bash
         run: |
@@ -66,6 +70,21 @@ jobs:
         env:
           HEIC_BROWSER_CHANNEL: msedge
         run: node tests/heic-browser-e2e.mjs
+      - name: Generate synthetic 24.47MP HEIC — no private image data
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq libheif-examples libx265-dev
+          heif-enc --list-encoders
+          heif-enc --list-encoders | grep -Eiq 'x265|HEIC encoders'
+          python3 tools/heic/generate-heic-highres-fixture.py "$RUNNER_TEMP/heic-fixture/synthetic-highres.png"
+          heif-enc -q 35 -o "$RUNNER_TEMP/heic-fixture/synthetic-highres.heic" \
+            "$RUNNER_TEMP/heic-fixture/synthetic-highres.png"
+          heif-info "$RUNNER_TEMP/heic-fixture/synthetic-highres.heic"
+          test -s "$RUNNER_TEMP/heic-fixture/synthetic-highres.heic"
+          echo "HEIC_HIGHRES_TEST_FILE=$RUNNER_TEMP/heic-fixture/synthetic-highres.heic" >> "$GITHUB_ENV"
+      - name: Chromium synthetic 24.47MP double decode, editor load and RSS
+        run: node tests/heic-highres-synthetic-e2e.mjs
       - name: Check release remains BLOCKED
         shell: bash
         run: |
