@@ -37,3 +37,19 @@ Source of statutory text: https://www.gnu.org/licenses/lgpl-3.0.html (notices an
 - Do not quietly change GitHub Pages to load it from any third-party CDN.
 - Do not merge all HEIC feature drafts to `main` under a claim of ready-for-production until review and end-to-end tests are complete.
 - When ready, add a specific release approval document recording compliance evidence, not a generic checkbox or an unverified claim.
+
+## Security and patent review update (2026-10-20)
+
+**New independent blockers:** the pinned HEIC WASM contains `libde265 1.0.15`
+and `libheif 1.23.5`, superseded by security releases. Do not deploy this
+binary as-is. See [HEIC WASM licensing, patent and security assessment](heic-wasm-risk-assessment-20261020.md).
+
+The LGPL-3.0 obligations are not a patent license. Access Advance's own FAQ
+states that freely downloaded HEVC software generally requires a license,
+with possible exceptions assessed per deployment. No assumption of automatic
+royalty-free status for a free browser application is supported. Obtain a
+documented determination; source-code license conformity alone cannot clear
+the `HEVCPatentAssessment` gate.
+
+The release manifest now also requires an independent `decoderSecurityAudit`
+for a verified security-updated **actual** WASM before production.
