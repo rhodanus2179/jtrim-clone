@@ -22,3 +22,7 @@ The warning is shown before opening the editor, not on every thumbnail. Backgrou
 - P6 rebuilt-WASM job **must complete successfully before claiming this proof**.
 - Edge/Chromium existing HEIC tests remain in place; real 24.5MP full UI, low-memory devices, P3/HDR fidelity and legal review remain pending.
 - `docs/heic-release-manifest.json` flags remain **pending**, especially LGPL replacement and patent approval; `node tools/heic/release-gate.mjs --assert-release` must still fail.
+
+## 2026-10-20: first modified build failure and fix
+
+Initial P6 run [39372621581](https://github.com/rhodanus2179/jtrim-clone/actions/runs/39372621581) failed after the native source compilation had reached the Emscripten TypeScript declaration-generation stage. The exact failure was `error TS5102: Option 'outFile' has been removed`, followed by `emcc: error: tsc --outFile ... failed`. The GitHub runner's default newer TypeScript is incompatible with Emscripten 3.1.61. We now pin and verify `typescript@5.4.5` before the recompilation, including after the Emscripten environment activation. This is a toolchain compatibility fix, not a codec or source semantics change. A rerun must still pass real HEIC decoding and app E2E before the rebuild is reported successful.
