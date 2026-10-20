@@ -45,7 +45,8 @@
       "HEVCPatentAssessment": "pending",
       "EdgeBrowserAcceptance": "pending",
       "highResolutionUiAcceptance": "pending",
-      "peakMemoryAcceptance": "pending"
+      "peakMemoryAcceptance": "pending",
+      "applicationLicenseDecision": "pending"
     }
   }
 }

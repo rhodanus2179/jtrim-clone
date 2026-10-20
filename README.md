@@ -273,3 +273,9 @@ https://www.woodybells.com/about.html
 ## Implementation policy
 
 原版のバイナリや実行コードをコピーせず、公開されている仕様・ヘルプ・画面資料を参考に独自実装します。
+
+## HEIC/HEIF 対応（開発中）
+
+HEIC入力は作業ブランチのドラフトPRで検証中です。現行の`main`にはHEIC用WASMを正式同梱していません。承認後は一般利用者が通常の画像と同様に開ける設計で、利用者にライブラリの差し替えを求めません。
+
+開発者向けのソース・ライセンス資料：[P7 配布準備](docs/heic-p7-developer-source-guide.md)。正式公開は引き続き保留しています。
