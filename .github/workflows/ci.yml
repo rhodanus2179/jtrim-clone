@@ -29,6 +29,10 @@ jobs:
         run: node tests/heic-format-smoke.mjs
       - name: Run HEIF module resolver unit tests
         run: node tests/heic-module-resolver-smoke.mjs
+      - name: Ensure HEIC test workflows never publish unapproved WASM
+        run: node tests/heic-no-unapproved-artifact-smoke.mjs
+      - name: Test HEIC serialized Worker and failure recovery
+        run: node tests/heif-work-queue-smoke.mjs
       - name: Run HEIF decoder contract smoke tests
         run: node tests/heif-decoder-contract-smoke.mjs
       - name: Check HEIF Worker module import

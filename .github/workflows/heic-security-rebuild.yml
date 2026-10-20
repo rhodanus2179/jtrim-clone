@@ -7,6 +7,10 @@ on:
       - "tools/heic/build-updated-wasm.sh"
       - "docs/heic-security-build-candidate.json"
       - "tests/heic-updated-wasm-e2e.mjs"
+      - "js/worker/heif-worker.js"
+      - "js/worker/heif-work-queue.js"
+      - "js/codecs/heif-client.js"
+      - "tests/heif-work-queue-smoke.mjs"
       - "tests/heic-highres-synthetic-e2e.mjs"
       - "tools/heic/generate-heic-highres-fixture.py"
   workflow_dispatch:
