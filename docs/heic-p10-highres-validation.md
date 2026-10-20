@@ -45,3 +45,20 @@ acceptance thresholds.
 The current production manifest stays on HOLD for LGPL obligations,
 HEVC patent licensing, security audit, actual vendor artifact and rights
 holder release approval. No binary or image is committed or published.
+
+## Completed synthetic high-resolution CI (2026-10-20)
+
+[GitHub Actions run 39383371554](https://github.com/rhodanus2179/jtrim-clone/actions/runs/39383371554) passed:
+- Native-generated synthetic 4284×5712 HEIC measured **6,285 bytes compressed**.
+- Chromium decoded it twice using the updated 1.23.6/1.1.3 WASM: **535ms and 261ms** in the CI runner; 4 quadrant samples correct.
+- Canvas to JPEG valid, original JTrim file-input path opened successfully.
+- Chromium process RSS sum: starting 355,496 KiB; observed maximum 967,320 KiB. This is NOT a unique memory figure (shared pages are counted more than once), nor a device-wide safe-memory limit.
+- Updated WASM digest was identical to prior two builds, and Chromium/Edge public fixture regression passed.
+- Release gate remained HOLD with 18 blockers.
+
+**Finding:** the previously implemented >=2MiB compressed-file warning misses the
+6.3KB/24.47MP example. P10 therefore adds a bounded pre-decode HEIF
+`meta/iprp/ipco/ispe` spatial-extent inspection. An unknown/unsupported
+spatial extent also triggers a warning. This is a human-facing warning, **not**
+a hard security or memory allocation limit, nor an actual private-HEIC
+metadata and color-management acceptance.
