@@ -27,8 +27,24 @@
     "node": "22",
     "libde265BuildSystem": "CMake"
   },
-  "wasmSha256": null,
+  "wasmSha256": "fb6dfd39bd09bd7c8dbeed5cc4b46b144b95ffb138deee56b96320956173adb4",
   "runtimeVerified": false,
   "patentLicenseConfirmed": false,
-  "legalDistributionApproved": false
+  "legalDistributionApproved": false,
+  "reproduction": {
+    "builds": 2,
+    "sha256Match": true,
+    "runIds": [
+      39379779684,
+      39381223772
+    ],
+    "scope": "identical source pins and toolchain on GitHub Actions ubuntu-22.04; public HEIC E2E only"
+  },
+  "runtimeEvidence": {
+    "publicFixture": "1280x854 upstream HEIC",
+    "chromium": "pass",
+    "msedge": "pass",
+    "privateOriginals24MP": "pending",
+    "synthetic24MP": "pending"
+  }
 }

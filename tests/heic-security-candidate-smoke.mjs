@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const c=JSON.parse(fs.readFileSync(new URL('../docs/heic-security-build-candidate.json',import.meta.url)));
 assert.equal(c.status,'EXPERIMENTAL_NOT_FOR_DISTRIBUTION');
-assert.equal(c.wasmSha256,null);assert.equal(c.runtimeVerified,false);
+assert.equal(c.wasmSha256,'fb6dfd39bd09bd7c8dbeed5cc4b46b144b95ffb138deee56b96320956173adb4');
+assert.equal(c.reproduction.builds,2);
+assert.equal(c.reproduction.sha256Match,true);
+assert.equal(c.runtimeVerified,false);
 assert.equal(c.legalDistributionApproved,false);
 for(const name of ['libheif','libde265']) {
  const s=c.sourcePins.find(x=>x.name===name);

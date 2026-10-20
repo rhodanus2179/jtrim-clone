@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const info=JSON.parse(fs.readFileSync(new URL('../docs/heic-security-build-candidate.json',import.meta.url)));
+assert.equal(info.status,'EXPERIMENTAL_NOT_FOR_DISTRIBUTION');
+assert.equal(info.legalDistributionApproved,false);
+assert.equal(info.runtimeVerified,false);
+assert.equal(info.wasmSha256,'fb6dfd39bd09bd7c8dbeed5cc4b46b144b95ffb138deee56b96320956173adb4');
+assert.equal(info.reproduction.builds,2);
+assert.equal(info.reproduction.sha256Match,true);
+assert.equal(info.runtimeEvidence.privateOriginals24MP,'pending');
+console.log('Pinned reproducible experimental HEIC bundle, no release approval');
