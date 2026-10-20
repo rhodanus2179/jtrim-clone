@@ -31,6 +31,8 @@ jobs:
         run: node tests/heif-decoder-contract-smoke.mjs
       - name: Check HEIF Worker module import
         run: node --input-type=module -e "globalThis.self={addEventListener(){},postMessage(){}}; await import('./js/worker/heif-worker.js')"
+      - name: Run HEIC input integration smoke tests
+        run: node tests/heic-input-integration-smoke.mjs
       - name: Run JPEG / print smoke tests
         run: node tests/jpeg-print-smoke.mjs
       - name: Run shortcut smoke tests
