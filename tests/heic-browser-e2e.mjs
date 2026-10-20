@@ -7,6 +7,8 @@ import { pathToFileURL } from "node:url";
 const required = ["PLAYWRIGHT_MODULE", "HEIC_TEST_FILE"];
 for (const key of required) if (!process.env[key]) throw Error(key + " required");
 const { chromium } = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
+const channel = process.env.HEIC_BROWSER_CHANNEL || "chromium";
+assert.ok(["chromium", "msedge"].includes(channel), "Unsupported HEIC browser channel: " + channel);
 const root = process.cwd();
 const types = new Map([
   [".html", "text/html; charset=utf-8"], [".js", "text/javascript; charset=utf-8"],
@@ -27,18 +29,29 @@ await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const base = "http://127.0.0.1:" + server.address().port;
 let browser;
 try {
-  browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+  browser = await chromium.launch({
+    headless: true,
+    args: ["--no-sandbox"],
+    ...(channel === "msedge" ? { channel: "msedge" } : {})
+  });
+  console.log("HEIC browser:", channel, browser.version());
   const page = await browser.newPage();
   page.on("pageerror", error => console.error("Page error:", error.message));
   await page.goto(base, { waitUntil: "load" });
   const info = await page.evaluate(async () => {
     const vendor = await import("./third_party/libheif-js/libheif-bundle.mjs");
-    return { exports: Object.keys(vendor), kind: typeof vendor.default,
+    return { replacementProbe: vendor.replacementProbe || null, exports: Object.keys(vendor), kind: typeof vendor.default,
       keys: typeof vendor.default === "object" ? Object.keys(vendor.default || {}).slice(0, 16) : [],
       hasDecoder: typeof vendor.default?.HeifDecoder,
       thenable: typeof vendor.default?.then };
   });
   console.log("WASM module shape:", JSON.stringify(info));
+  if (process.env.HEIC_REPLACEMENT_TEST === "1") {
+    assert.equal(info.replacementProbe, "p5-wrapper-v1",
+      "The locally substituted ESM module must actually be imported");
+  } else {
+    assert.equal(info.replacementProbe, null, "Unmodified codec expected");
+  }
   const bytes = [...new Uint8Array(await fs.readFile(process.env.HEIC_TEST_FILE))];
   const result = await page.evaluate(async array => {
     const file = new File([new Uint8Array(array)], "upstream-example.heic", { type: "image/heic" });
