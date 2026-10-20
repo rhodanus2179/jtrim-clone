@@ -1,0 +1,40 @@
+name: HEIC source provenance staging (no distribution)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "docs/heic-release-manifest.json"
+      - "tools/heic/**"
+      - ".github/workflows/heic-source-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  source-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate draft release gate
+        run: |
+          node tests/heic-release-gate-smoke.mjs
+          node tools/heic/release-gate.mjs --review-status
+      - name: Assemble original binary and complete pinned source trees
+        shell: bash
+        run: bash tools/heic/stage-review.sh "$RUNNER_TEMP/heic-review"
+      - name: Verify package and source staging
+        shell: bash
+        run: |
+          test -s "$RUNNER_TEMP/heic-review/vendor/libheif-bundle.mjs"
+          test -s "$RUNNER_TEMP/heic-review/licenses/libheif-COPYING"
+          test -s "$RUNNER_TEMP/heic-review/licenses/libde265-COPYING"
+          test -s "$RUNNER_TEMP/heic-review/report/sources.tsv"
+          for source in libheif-js libheif-emscripten libheif libde265; do
+            test -d "$RUNNER_TEMP/heic-review/sources/$source"
+          done
+          printf 'HEIC source staging verified. Binary/source remain private to runner; not uploaded.\n'
