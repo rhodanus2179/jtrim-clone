@@ -24,10 +24,16 @@ export class HeifClient {
         error?.detail || null
       ));
     });
-    worker.addEventListener("error", event => {
-      this.failAll(new HeifDecodeError("HEIF_WORKER_FAILED", event.message || "HEIC Workerでエラーが発生しました。"));
+    const failWorker = (code, message) => {
+      this.failAll(new HeifDecodeError(code, message));
       worker.terminate();
       if (this.worker === worker) this.worker = null;
+    };
+    worker.addEventListener("error", event => {
+      failWorker("HEIF_WORKER_FAILED", event.message || "HEIC Workerでエラーが発生しました。");
+    });
+    worker.addEventListener("messageerror", () => {
+      failWorker("HEIF_WORKER_MESSAGE_ERROR", "HEIC Workerの受信データが不正です。");
     });
     return worker;
   }
