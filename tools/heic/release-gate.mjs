@@ -9,10 +9,10 @@ const goodHash = value => /^[0-9a-f]{64}$/.test(value || "");
 const APPROVAL_ITEMS = [
   "versionMatchedSource", "fullCorrespondingSource", "LGPLandGPLTexts",
   "libraryReplacementTest", "HEVCPatentAssessment", "EdgeBrowserAcceptance",
-  "highResolutionUiAcceptance", "peakMemoryAcceptance"
+  "highResolutionUiAcceptance", "peakMemoryAcceptance", "applicationLicenseDecision"
 ];
 
-export function evaluateHeicRelease(manifest, { vendorFile = null, sourceDirectory = null } = {}) {
+export function evaluateHeicRelease(manifest, { vendorFile = null, sourceDirectory = null, applicationLicenseFile = null } = {}) {
   const blockers = [];
   if (manifest?.schemaVersion !== 1 || manifest?.package !== "libheif-js" ||
     manifest?.npmVersion !== "1.23.5" || !goodHash(manifest?.bundle?.sha256)) {
@@ -40,6 +40,8 @@ export function evaluateHeicRelease(manifest, { vendorFile = null, sourceDirecto
         blockers.push("missing source directory: "+src);
     }
   } else blockers.push("complete source bundle not supplied for final release verification");
+  if (!applicationLicenseFile || !fs.statSync(applicationLicenseFile, { throwIfNoEntry: false })?.isFile() || !fs.readFileSync(applicationLicenseFile, 'utf8').trim())
+    blockers.push('application license is not documented');
   const distribution = manifest?.distribution || {};
   for (const item of APPROVAL_ITEMS) {
     if (distribution.evidence?.[item] !== "approved")
@@ -63,7 +65,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     throw Error("Usage: node tools/heic/release-gate.mjs [--review-status|--assert-release]");
   const { ready, blockers } = evaluateHeicRelease(manifest, {
     vendorFile: fileURLToPath(new URL("../../third_party/libheif-js/libheif-bundle.mjs", import.meta.url)),
-    sourceDirectory: fileURLToPath(new URL("../../third_party/libheif-source", import.meta.url))
+    sourceDirectory: fileURLToPath(new URL("../../third_party/libheif-source", import.meta.url)),
+    applicationLicenseFile: fileURLToPath(new URL("../../LICENSE", import.meta.url))
   });
   console.log(ready ? "HEIC RELEASE READY" : "HEIC RELEASE HOLD — " + blockers.length + " blockers");
   for (const reason of blockers) console.log("  - " + reason);

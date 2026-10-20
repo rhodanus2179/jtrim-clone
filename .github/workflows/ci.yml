@@ -39,6 +39,8 @@ jobs:
         run: |
           node tests/heic-release-gate-smoke.mjs
           node tools/heic/release-gate.mjs --review-status
+      - name: HEIC private review packet smoke tests
+        run: node tests/heic-review-packet-smoke.mjs
       - name: Run HEIC memory warning unit tests
         run: node tests/heic-memory-warning-smoke.mjs
       - name: Run HEIC overwrite protection tests

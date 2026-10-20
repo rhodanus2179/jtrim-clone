@@ -38,3 +38,13 @@ jobs:
             test -d "$RUNNER_TEMP/heic-review/sources/$source"
           done
           printf 'HEIC source staging verified. Binary/source remain private to runner; not uploaded.\n'
+      - name: Assemble isolated HEIC review packet (not uploaded)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/heic/prepare-review-packet.mjs "$RUNNER_TEMP/heic-review" "$RUNNER_TEMP/heic-review-packet"
+          node -e 'const fs=require("fs");const x=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/heic-review-packet/REVIEW-INDEX.json"));if(x.status!=="REVIEW_ONLY_NOT_AUTHORIZED_FOR_DISTRIBUTION"||x.sources.length!==4)process.exit(1)'
+          test -s "$RUNNER_TEMP/heic-review-packet/vendor/libheif-bundle.mjs"
+          test -s "$RUNNER_TEMP/heic-review-packet/application-source/js/io/files.js"
+          echo "Review candidate verified locally; no archive upload or publication."
+
