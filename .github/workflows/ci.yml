@@ -21,6 +21,8 @@ jobs:
           node --input-type=module -e "globalThis.self={addEventListener(){},postMessage(){}}; await import('./js/worker/codec-worker.js')"
       - name: Check IO module imports
         run: node --input-type=module -e "await import('./js/io/files.js'); await import('./js/io/jpeg-exif.js'); await import('./js/io/jpeg-info.js'); await import('./js/io/print.js'); await import('./js/io/zip.js'); await import('./js/io/file-system-access.js'); await import('./js/io/handle-store.js'); await import('./js/workspace/workspace-controller.js'); await import('./js/preferences.js')"
+      - name: Validate proprietary license and inherited third-party notices
+        run: node tests/license-boundary-smoke.mjs
       - name: Run IO smoke tests
         run: node tests/io-smoke.mjs
       - name: Run File System Access smoke tests

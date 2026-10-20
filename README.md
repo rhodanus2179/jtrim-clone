@@ -273,3 +273,11 @@ https://www.woodybells.com/about.html
 ## Implementation policy
 
 原版のバイナリや実行コードをコピーせず、公開されている仕様・ヘルプ・画面資料を参考に独自実装します。
+
+## License / 利用許諾
+
+JTrim Clone／JTrim Webの独自実装部分は**独自ライセンス（権利留保）**です。[LICENSE](LICENSE)を参照してください。ブラウザ版の通常利用と、ソースコードの再配布・改変許諾は区別しています。
+
+**第三者ライブラリについては各原ライセンスを維持**し、本体の権利留保を適用しません。適用範囲の整理は[ライセンス方針](docs/proprietary-and-third-party-license-policy.md)、各通知は[第三者ライセンス](docs/third-party-notices.md)をご覧ください。
+
+HEIC/HEIF用WASMは別の開発PRで検証中であり、現行公開版には正式同梱していません。一般利用者にライブラリ交換等の作業は求めません。

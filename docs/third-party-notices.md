@@ -1,5 +1,12 @@
 # Third-party notices
 
+This document covers separately licensed third-party components. The original
+JTrim Web application is proprietary under [../LICENSE](../LICENSE). That
+notice does not override or restrict the rights granted by the original
+licenses of the dependencies. See
+[application and third-party license scope](proprietary-and-third-party-license-policy.md).
+
+
 ## libjpeg-turbo
 
 The advanced JPEG codec uses **libjpeg-turbo 3.2.0**, compiled to WebAssembly for browser execution.
