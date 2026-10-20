@@ -39,3 +39,19 @@ The production decoder remains unshipped. LGPL release review, independent
 security analysis and HEVC patents are separate HOLD blockers.
 
 No user photo, EXIF or private metadata is committed.
+
+## Protected private-original metadata preflight (not a WASM decode)
+
+Using the original private iPhone HEICs **locally only**, the first 256KiB
+of each ISO-BMFF header was traversed with the same nested-box rules as
+`inspectHeicSpatialExtents`. Each reported largest `ispe` dimensions of
+**5712×4284 = 24,470,208 pixels** (the first also contains a separate
+4284×5712 spatial extent consistent with a rotated image). Both satisfy
+the >=12MP pre-decode memory warning threshold.
+
+These files contain multiple properties and thumbnails; selecting the first
+`ispe` would give misleading dimensions. Selecting the largest is a warning
+heuristic, NOT a primary-image selection algorithm. This check does not prove
+full UI/WASM color fidelity, nor metadata location for all possible HEIFs.
+Unknown extents trigger a warning. No original image bytes, EXIF, or
+derived previews have been uploaded to GitHub.
