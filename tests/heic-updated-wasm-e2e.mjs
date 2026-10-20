@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {resolveHeifModule} from '../js/codecs/resolve-heif-module.js';
+import {decodeHeifWithApi} from '../js/codecs/heif-decode-core.js';
+const c=JSON.parse(await fs.readFile(new URL('../docs/heic-security-build-candidate.json',import.meta.url)));
+assert.equal(c.status,'EXPERIMENTAL_NOT_FOR_DISTRIBUTION');
+assert.equal(c.legalDistributionApproved,false);
+const api=await resolveHeifModule(await import('../third_party/libheif-js/libheif-bundle.mjs'));
+assert.equal(api.securityBuildProof,'jtrim-secure-libheif-1.23.6-de265-1.1.3');
+const file=process.env.HEIC_TEST_FILE;
+if(!file) throw Error('public HEIC_TEST_FILE required');
+const bytes=new Uint8Array(await fs.readFile(file));
+const frame=await decodeHeifWithApi(api,bytes);
+assert.ok(frame.width>0&&frame.height>0);
+assert.equal(frame.buffer.byteLength,frame.width*frame.height*4);
+console.log('Updated libheif/libde265 WASM real HEIC decode PASS:',frame.width,frame.height);

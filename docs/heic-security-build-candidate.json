@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "status": "EXPERIMENTAL_NOT_FOR_DISTRIBUTION",
+  "sourcePins": [
+    {
+      "name": "libheif-js",
+      "repo": "catdad-experiments/libheif-js",
+      "sha": "d8ec4bc3bc5bf8055975577bccbbc7e1d7313c2d",
+      "version": "1.23.5-packaging-only"
+    },
+    {
+      "name": "libheif",
+      "repo": "strukturag/libheif",
+      "sha": "f81f28ac014b1c28dee483ac45b72c6b05bc421a",
+      "version": "1.23.6"
+    },
+    {
+      "name": "libde265",
+      "repo": "strukturag/libde265",
+      "sha": "ba62bf4cfb3242f3bf0a45617ff09e35236e4d82",
+      "version": "1.1.3"
+    }
+  ],
+  "toolchain": {
+    "emscripten": "3.1.61",
+    "typescript": "5.4.5",
+    "node": "22",
+    "libde265BuildSystem": "CMake"
+  },
+  "wasmSha256": null,
+  "runtimeVerified": false,
+  "patentLicenseConfirmed": false,
+  "legalDistributionApproved": false
+}
