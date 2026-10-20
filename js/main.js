@@ -6,6 +6,7 @@ import {
   createBlankCanvas, decodeFileToCanvas, saveCanvas, encodeCanvas,
   encodeJpegToTargetSize, downloadBlob
 } from "./io/files.js";
+import { isHeicCandidate, isSupportedInputImage } from "./io/image-format.js";
 import {
   cropCanvas, coordinateCrop, circularCrop, roundedCrop,
   rotate90, rotateArbitrary, flipCanvas, shiftCanvas, addMargin, addShadow, applyTexture,
@@ -188,12 +189,8 @@ function setMessage(message) {
 }
 
 async function fileToCanvas(file) {
-  const bitmap = await createImageBitmap(file);
   const out = document.createElement("canvas");
-  out.width = bitmap.width;
-  out.height = bitmap.height;
-  out.getContext("2d").drawImage(bitmap, 0, 0);
-  bitmap.close?.();
+  await decodeFileToCanvas(file, out);
   return out;
 }
 
@@ -376,7 +373,7 @@ async function commitPreview(label) {
 }
 
 async function loadFile(file, sourceContext = null) {
-  if (!file || !file.type.startsWith("image/")) {
+  if (!isSupportedInputImage(file)) {
     setMessage("画像ファイルを選択してください");
     return;
   }
@@ -3223,7 +3220,7 @@ function setupBatchDialog() {
 
   $("#batchFileInput").addEventListener("change", event => {
     batchItems = [...(event.target.files || [])]
-      .filter(file => file.type.startsWith("image/"))
+      .filter(file => isSupportedInputImage(file))
       .map(file => ({
         name: file.name,
         relativePath: file.webkitRelativePath || file.name,
@@ -3472,7 +3469,9 @@ function releaseGalleryUrls() {
   galleryLoadMoreObserver = null;
   for (const item of galleryItems) {
     if (item.url) URL.revokeObjectURL(item.url);
+    if (item.thumbnailUrl) URL.revokeObjectURL(item.thumbnailUrl);
     item.url = null;
+    item.thumbnailUrl = null;
   }
 }
 
@@ -3490,14 +3489,15 @@ function setGalleryFiles(files) {
   clearGallery();
   folderWorkspace.useLegacyMode();
   galleryItems = [...files]
-    .filter(file => file.type.startsWith("image/"))
+    .filter(file => isSupportedInputImage(file))
     .sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true }))
     .map(file => ({
       kind: "file",
       name: file.name,
       file,
       handle: null,
-      url: URL.createObjectURL(file),
+      url: isHeicCandidate(file) ? null : URL.createObjectURL(file),
+      thumbnailUrl: null,
       size: file.size,
       lastModified: file.lastModified,
       mimeType: file.type
@@ -3629,14 +3629,46 @@ async function ensureGalleryFile(item) {
   return file;
 }
 
-async function ensureGalleryUrl(item) {
+// Sequential HEIC previews avoid simultaneous high-resolution RGBA allocations.
+let heicPreviewQueue = Promise.resolve();
+function sequenceHeicPreview(task) {
+  const next = heicPreviewQueue.then(task, task);
+  heicPreviewQueue = next.catch(() => {});
+  return next;
+}
+
+async function previewHeic(file, maxDimension) {
+  const decoded = document.createElement("canvas");
+  await decodeFileToCanvas(file, decoded);
+  const scale = Math.min(1, maxDimension / Math.max(decoded.width, decoded.height));
+  const thumb = document.createElement("canvas");
+  thumb.width = Math.max(1, Math.round(decoded.width * scale));
+  thumb.height = Math.max(1, Math.round(decoded.height * scale));
+  thumb.getContext("2d").drawImage(decoded, 0, 0, thumb.width, thumb.height);
+  decoded.width = decoded.height = 0; // release backing store
+  return await new Promise((resolve, reject) => thumb.toBlob(
+    blob => blob ? resolve(blob) : reject(new Error("HEICプレビュー生成に失敗しました。")),
+    "image/webp", .85));
+}
+
+async function ensureGalleryUrl(item, thumbnail = false) {
   if (!item || item.kind !== "file") return null;
-  if (item.url) return item.url;
+  const key = thumbnail ? "thumbnailUrl" : "url";
+  if (item[key]) return item[key];
   if (!isLikelyImageName(item.name)) return null;
   const file = await ensureGalleryFile(item);
-  if (!file?.type?.startsWith("image/")) return null;
-  item.url = URL.createObjectURL(file);
-  return item.url;
+  if (!isSupportedInputImage(file)) return null;
+  if (!isHeicCandidate(file)) {
+    item.url ||= URL.createObjectURL(file);
+    return item.url;
+  }
+  return await sequenceHeicPreview(async () => {
+    if (item[key]) return item[key];
+    const blob = await previewHeic(file, thumbnail ? 480 : 2048);
+    if (!galleryItems.includes(item)) return null;
+    item[key] = URL.createObjectURL(blob);
+    return item[key];
+  });
 }
 
 function workspaceRelativePathFor(item) {
@@ -3664,7 +3696,7 @@ async function openGalleryItem(item) {
   }
 
   const file = await ensureGalleryFile(item);
-  if (!file?.type?.startsWith("image/")) {
+  if (!isSupportedInputImage(file)) {
     setMessage("このファイルはブラウザで画像として認識されませんでした");
     return;
   }
@@ -3757,7 +3789,7 @@ async function loadThumbnail(index, button) {
   const item = galleryItems[index];
   if (!item || item.kind !== "file" || !isLikelyImageName(item.name)) return;
   try {
-    const url = await ensureGalleryUrl(item);
+    const url = await ensureGalleryUrl(item, true);
     if (!url || !button.isConnected || galleryItems[index] !== item) return;
     const placeholder = button.querySelector(".thumbnail-loading");
     const img = document.createElement("img");
@@ -3927,7 +3959,7 @@ function requestGallery(action) {
 function getSlideshowItems() {
   return galleryItems.filter(item =>
     item.kind === "file" &&
-    (item.file?.type?.startsWith("image/") || isLikelyImageName(item.name))
+    (isSupportedInputImage(item.file) || isLikelyImageName(item.name))
   );
 }
 
@@ -5087,7 +5119,7 @@ async function handleDroppedDataTransfer(dataTransfer) {
   const fileHandle = handles.find(handle => handle?.kind === "file" && isLikelyImageName(handle.name));
   if (fileHandle) {
     const file = await getFileFromHandle(fileHandle);
-    if (file?.type?.startsWith("image/")) {
+    if (isSupportedInputImage(file)) {
       await loadFile(file, {
         fileHandle,
         parentDirectoryHandle: null,
@@ -5097,7 +5129,7 @@ async function handleDroppedDataTransfer(dataTransfer) {
     }
   }
 
-  const files = [...(dataTransfer.files || [])].filter(file => file.type.startsWith("image/"));
+  const files = [...(dataTransfer.files || [])].filter(file => isSupportedInputImage(file));
   if (files.length === 1) {
     await loadFile(files[0]);
     return true;

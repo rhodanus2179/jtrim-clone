@@ -1,5 +1,5 @@
 const IMAGE_EXTENSIONS = new Set([
-  "jpg", "jpeg", "png", "webp", "gif", "bmp", "avif", "ico"
+  "jpg", "jpeg", "png", "webp", "gif", "bmp", "avif", "ico", "heic", "heif"
 ]);
 
 export function getFileSystemCapabilities(scope = globalThis) {

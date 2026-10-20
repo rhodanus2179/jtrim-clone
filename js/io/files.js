@@ -1,17 +1,40 @@
 import { extractExifSegment, injectExif } from "./jpeg-exif.js";
 import { parseJpegInfo } from "./jpeg-info.js";
+import { isHeicCandidate, inspectHeifFile } from "./image-format.js";
+import { HeifClient } from "../codecs/heif-client.js";
+
+let heifClient;
+function client() { return heifClient ||= new HeifClient(); }
+
 export async function decodeFileToCanvas(file, canvas) {
   const isJpeg = file?.type === "image/jpeg" || /\.jpe?g$/i.test(file?.name || "");
   const [exifSegment, jpegInfo] = isJpeg
     ? await Promise.all([extractExifSegment(file), parseJpegInfo(file)])
     : [null, null];
-  const bitmap = await createImageBitmap(file);
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close?.();
+  let bitmap = null;
+  try { bitmap = await createImageBitmap(file); }
+  catch (nativeError) { if (!isHeicCandidate(file)) throw nativeError; }
+
+  if (bitmap) {
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+  } else {
+    const format = await inspectHeifFile(file);
+    if (format.family !== "hevc") {
+      throw new Error(format.family === "avif"
+        ? "AVIFはHEIC専用デコーダーでは扱えません。"
+        : "HEIC/HEIFの形式を確認できませんでした。");
+    }
+    const { buffer, width, height } = await client().decode(file);
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(buffer), width, height), 0, 0);
+  }
   return {
     fileName: file.name || "image",
     sourceFormat: file.type || "image/unknown",
