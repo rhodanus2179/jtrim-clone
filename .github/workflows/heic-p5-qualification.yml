@@ -1,0 +1,67 @@
+name: HEIC P5 Edge and Module Substitution
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/heic-p5-qualification.yml"
+      - "tests/heic-browser-e2e.mjs"
+      - "tools/heic/replacement-probe.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  edge-substitution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Download pinned decoder for temporary testing
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/heic-lib" --no-save --ignore-scripts --no-package-lock "libheif-js@1.23.5"
+          CODEC="$RUNNER_TEMP/heic-lib/node_modules/libheif-js/libheif-wasm/libheif-bundle.mjs"
+          EXPECTED="$(node -p "require('./docs/heic-release-manifest.json').bundle.sha256")"
+          printf '%s  %s\n' "$EXPECTED" "$CODEC" | sha256sum -c -
+          mkdir -p third_party/libheif-js
+          cp "$CODEC" third_party/libheif-js/libheif-bundle.mjs
+      - name: Get public HEIC test image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/heic-public"
+          curl --retry 3 --fail --location --silent --show-error \
+            "https://raw.githubusercontent.com/strukturag/libheif/364905fc9841bdda229e0ae2c5fda13b5fc98d1a/examples/example.heic" \
+            -o "$RUNNER_TEMP/heic-public/example.heic"
+          test "$(stat -c%s "$RUNNER_TEMP/heic-public/example.heic")" = "718114"
+          echo "HEIC_TEST_FILE=$RUNNER_TEMP/heic-public/example.heic" >> "$GITHUB_ENV"
+      - name: Install pinned Playwright and Microsoft Edge
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/heic-playwright" --no-save --ignore-scripts --no-package-lock "playwright@1.56.1"
+          "$RUNNER_TEMP/heic-playwright/node_modules/.bin/playwright" install --with-deps msedge
+          echo "PLAYWRIGHT_MODULE=$RUNNER_TEMP/heic-playwright/node_modules/playwright/index.mjs" >> "$GITHUB_ENV"
+          echo "HEIC_BROWSER_CHANNEL=msedge" >> "$GITHUB_ENV"
+      - name: Real HEIC editor UI in Microsoft Edge
+        run: node tests/heic-browser-e2e.mjs
+      - name: Swap ESM module endpoint to a compatible local adapter
+        run: node tools/heic/replacement-probe.mjs --install
+      - name: Real HEIC editor UI with substituted Edge module
+        env:
+          HEIC_REPLACEMENT_TEST: "1"
+        run: node tests/heic-browser-e2e.mjs
+      - name: Restore and checksum pristine decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/heic/replacement-probe.mjs --restore
+          EXPECTED="$(node -p "require('./docs/heic-release-manifest.json').bundle.sha256")"
+          printf '%s  %s\n' "$EXPECTED" "third_party/libheif-js/libheif-bundle.mjs" | sha256sum -c -
+      - name: Confirm release decision remains on hold
+        run: node tools/heic/release-gate.mjs --review-status
