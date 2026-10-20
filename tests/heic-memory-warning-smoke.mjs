@@ -40,7 +40,7 @@ const small=synthetic(1280,854);
 assert.equal(await shouldWarnHeicMemoryBeforeOpen(new File([small],"tiny.heif")),false);
 assert.equal(await shouldWarnHeicMemoryBeforeOpen(new File([small],"normal.png")),false);
 assert.equal(await shouldWarnHeicMemoryBeforeOpen(new File([new Uint8Array(20)],"unknown.HEIC")),true);
-const invalid=synthetic(1,1);invalid[0]=0;
+const invalid=synthetic(1,1);invalid[4]=0; // corrupt first 'f' in mandatory 'ftyp' box
 assert.equal(inspectHeicSpatialExtents(invalid),null);
 assert.equal(await shouldWarnHeicMemoryBeforeOpen({name:"bad.HEIC",size:10,slice(){throw Error("I/O")}}),true);
 assert.match(heicMemoryWarningMessage(),/圧縮ファイルが小さくても/);
