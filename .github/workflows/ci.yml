@@ -43,6 +43,8 @@ jobs:
         run: node tests/heic-review-packet-smoke.mjs
       - name: Run HEIC memory warning unit tests
         run: node tests/heic-memory-warning-smoke.mjs
+      - name: Check proprietary and inherited license notices
+        run: node tests/license-boundary-smoke.mjs
       - name: Run HEIC overwrite protection tests
         run: node tests/heic-save-guard-smoke.mjs
       - name: Run JPEG / print smoke tests
